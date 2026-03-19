@@ -213,7 +213,7 @@ func (b *dirBrowser) Update(msg tea.Msg) (dirBrowserAction, tea.Cmd) {
 			return b.drillUp()
 		}
 		return dirBrowserAtRoot, nil
-	case "space":
+	case "space", "n":
 		return dirBrowserSelected, nil
 	case "r":
 		return dirBrowserResume, nil

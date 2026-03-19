@@ -103,9 +103,9 @@ func (m createModel) View() string {
 	var help string
 	if e, ok := m.browser.SelectedEntry(); ok {
 		if e.count > 0 {
-			help = fmt.Sprintf("  [→] open  [space] new  [r] resume \"%s\"", e.name)
+			help = fmt.Sprintf("  [→] open  [n] new  [r] resume \"%s\"", e.name)
 		} else {
-			help = fmt.Sprintf("  [space] new  [r] resume \"%s\"", e.name)
+			help = fmt.Sprintf("  [n] new  [r] resume \"%s\"", e.name)
 		}
 	}
 	help += "  [t] teams  [/] filter"

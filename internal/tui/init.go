@@ -22,6 +22,7 @@ const (
 	stepDirs     initStep = iota
 	stepSettings initStep = iota
 	stepWrite    initStep = iota
+	stepSyncing  initStep = iota
 	stepDone     initStep = iota
 )
 
@@ -52,9 +53,13 @@ type InitModel struct {
 	height      int
 	launch      bool
 	reconfig    bool
-	passthrough bool   // tmux allow-passthrough
-	sandboxOK   bool   // server supports sandboxing
-	sandboxWhy  string // reason if not supported
+	passthrough  bool   // tmux allow-passthrough
+	sandboxOK    bool   // server supports sandboxing
+	sandboxWhy   string // reason if not supported
+	syncTotal    int    // total folders to sync
+	syncDone     int    // folders synced so far
+	syncCurrent  string // folder currently syncing
+	syncErr      error  // last sync error (non-fatal, continues)
 }
 
 // NewInit creates an init wizard model. hostArg is the optional user@host argument.
@@ -235,8 +240,37 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.step = stepDirs
 			return m, nil
 		}
-		m.step = stepDone
 		m.err = nil
+		// Start syncing selected folders
+		if len(m.selected) > 0 {
+			m.step = stepSyncing
+			m.syncTotal = len(m.selected)
+			m.syncDone = 0
+			// Sync the first folder
+			for path := range m.selected {
+				m.syncCurrent = path
+				return m, setupSyncCmd(m.host, m.user, m.homeDir, path)
+			}
+		}
+		m.step = stepDone
+		return m, nil
+
+	case syncSetupMsg:
+		m.syncDone++
+		if msg.err != nil {
+			m.syncErr = msg.err
+		}
+		// Find next un-synced folder
+		done := 0
+		for path := range m.selected {
+			done++
+			if done > m.syncDone {
+				m.syncCurrent = path
+				return m, setupSyncCmd(m.host, m.user, m.homeDir, path)
+			}
+		}
+		// All done
+		m.step = stepDone
 		return m, nil
 	}
 
@@ -253,6 +287,8 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stepSettings:
 		return m.updateSettings(msg)
 	case stepWrite:
+		return m, nil // async
+	case stepSyncing:
 		return m, nil // async
 	case stepDone:
 		return m.updateDone(msg)
@@ -411,6 +447,7 @@ func (m InitModel) View() tea.View {
 	m.renderDirsLine(&b)
 	m.renderSettingsLine(&b)
 	m.renderWriteLine(&b)
+	m.renderSyncingLine(&b)
 
 	b.WriteString("\n")
 
@@ -477,6 +514,8 @@ func (m InitModel) View() tea.View {
 		b.WriteString(helpStyle.Render("  [enter] save  [esc] back"))
 		b.WriteString("\n")
 	case stepWrite:
+		// progress shown in step line
+	case stepSyncing:
 		// progress shown in step line
 	case stepDone:
 		b.WriteString("  Setup complete!\n\n")
@@ -577,7 +616,32 @@ func (m InitModel) renderWriteLine(b *strings.Builder) {
 		))
 		b.WriteString("\n")
 	} else {
-		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Done")))
+		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Config")))
+		b.WriteString("\n")
+	}
+}
+
+func (m InitModel) renderSyncingLine(b *strings.Builder) {
+	if len(m.selected) == 0 {
+		return // nothing to sync, skip this line entirely
+	}
+	if m.step > stepSyncing {
+		info := fmt.Sprintf("%d folders synced", m.syncDone)
+		if m.syncErr != nil {
+			info += " (with errors)"
+		}
+		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %s", "Sync", info)))
+		b.WriteString("\n")
+	} else if m.step == stepSyncing {
+		info := fmt.Sprintf("Syncing %s (%d/%d)...", m.syncCurrent, m.syncDone+1, m.syncTotal)
+		b.WriteString(fmt.Sprintf("  %s %-12s %s",
+			m.spinner.View(),
+			"Sync",
+			info,
+		))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Sync")))
 		b.WriteString("\n")
 	}
 }

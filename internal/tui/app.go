@@ -397,7 +397,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case keyNew:
 			m.loadingDirs = true
-			return m, loadDirsCmd(m.manager)
+			return m, loadSyncedDirsCmd(m.manager)
 		case keySync:
 			m.syncView = newSyncModel(m.syncMgr)
 			m.view = viewSync
@@ -762,6 +762,36 @@ func loadSessionsCmd(mgr *session.Manager) tea.Cmd {
 	return func() tea.Msg {
 		sessions, err := mgr.List()
 		return sessionsLoadedMsg{sessions: sessions, err: err}
+	}
+}
+
+// loadSyncedDirsCmd lists synced folder contents on the server.
+// Falls back to legacy browse roots if no synced folders exist.
+func loadSyncedDirsCmd(mgr *session.Manager) tea.Cmd {
+	return func() tea.Msg {
+		// Check for synced folders at ~/.fusebox/sync/
+		out, err := mgr.SSH.Run(mgr.ServerPath() + " sandbox-status")
+		if err == nil && strings.Contains(string(out), `"synced":[`) {
+			// Parse synced dirs from sandbox-status JSON
+			// Look for entries in ~/.fusebox/sync/*/
+			syncOut, err := mgr.SSH.Run("ls -1d ~/.fusebox/sync/*/ 2>/dev/null | head -20")
+			if err == nil && strings.TrimSpace(string(syncOut)) != "" {
+				var dirs []string
+				for _, line := range strings.Split(strings.TrimSpace(string(syncOut)), "\n") {
+					line = strings.TrimSpace(line)
+					line = strings.TrimSuffix(line, "/")
+					if line != "" {
+						dirs = append(dirs, line)
+					}
+				}
+				if len(dirs) > 0 {
+					return dirsLoadedMsg{dirs: dirs}
+				}
+			}
+		}
+		// Fall back to legacy browse roots
+		dirs, err := mgr.ListDirs()
+		return dirsLoadedMsg{dirs: dirs, err: err}
 	}
 }
 

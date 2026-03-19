@@ -10,6 +10,7 @@ import (
 	"github.com/lableaks/fusebox/internal/config"
 	embedpkg "github.com/lableaks/fusebox/internal/embed"
 	"github.com/lableaks/fusebox/internal/ssh"
+	syncpkg "github.com/lableaks/fusebox/internal/sync"
 )
 
 // Messages for init wizard async operations.
@@ -36,6 +37,11 @@ type configWrittenMsg struct {
 type sandboxDetectedMsg struct {
 	supported bool
 	reason    string
+}
+
+type syncSetupMsg struct {
+	path string
+	err  error
 }
 
 type dirEntry struct {
@@ -254,6 +260,27 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough, san
 		}
 
 		return configWrittenMsg{}
+	}
+}
+
+// setupSyncCmd starts a mutagen sync session for a folder.
+// path is relative to homeDir (e.g. "work/lableaks").
+func setupSyncCmd(host, user, homeDir, relPath string) tea.Cmd {
+	return func() tea.Msg {
+		localHome, err := os.UserHomeDir()
+		if err != nil {
+			return syncSetupMsg{path: relPath, err: err}
+		}
+
+		localPath := localHome + "/" + relPath
+		sshTarget := user + "@" + host
+		dataDir := localHome + "/.fusebox"
+
+		mgr := syncpkg.NewManager(dataDir, sshTarget)
+		if err := mgr.Add(localPath); err != nil {
+			return syncSetupMsg{path: relPath, err: err}
+		}
+		return syncSetupMsg{path: relPath}
 	}
 }
 

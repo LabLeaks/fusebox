@@ -1,5 +1,5 @@
-# work-cli configuration
-# Copy to ~/.config/work-cli/config.yaml and edit.
+# fusebox configuration
+# Copy to ~/.config/fusebox/config.yaml and edit.
 
 server:
   host: your-server        # SSH hostname (required)
@@ -9,7 +9,12 @@ server:
 claude:
   flags: "--dangerously-skip-permissions --remote-control"
 
-# helper_path: ~/bin/work  # Optional — default ~/bin/work
+# helper_path: ~/bin/fusebox  # Optional — default ~/bin/fusebox
+
+# Sandbox isolation (Linux only).
+# sandbox:
+#   enabled: false            # Enable namespace isolation
+#   data_dir: ~/.fusebox      # Optional — default ~/.fusebox
 
 # Directories to browse when creating sessions.
 # Each root is scanned for immediate subdirectories.

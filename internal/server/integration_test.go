@@ -15,7 +15,7 @@ var testBinary string
 
 func TestMain(m *testing.M) {
 	// Build the binary to a temp location
-	tmp, err := os.CreateTemp("", "work-test-*")
+	tmp, err := os.CreateTemp("", "fusebox-test-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create temp file: %v\n", err)
 		os.Exit(1)
@@ -81,7 +81,7 @@ func TestIntegration_Help(t *testing.T) {
 	if !strings.Contains(out, "Claude Code session manager") {
 		t.Errorf("help output missing expected text: %s", out)
 	}
-	if !strings.Contains(out, "work list") {
+	if !strings.Contains(out, "fusebox list") {
 		t.Errorf("help output missing server commands: %s", out)
 	}
 }

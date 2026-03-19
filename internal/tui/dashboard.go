@@ -189,7 +189,7 @@ func (m dashboardModel) View() string {
 	var b strings.Builder
 
 	count := len(m.sessions)
-	header := fmt.Sprintf("  WORK  ·  %s  ·  %d active session", m.serverHost, count)
+	header := fmt.Sprintf("  FUSEBOX  ·  %s  ·  %d active session", m.serverHost, count)
 	if count != 1 {
 		header += "s"
 	}

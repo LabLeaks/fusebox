@@ -69,17 +69,17 @@ func CmdLocal(args []string) {
 }
 
 func localHelp() {
-	fmt.Println("work — Claude Code session manager")
+	fmt.Println("fusebox — Claude Code session manager")
 	fmt.Println()
-	fmt.Println("  work                  Dashboard (TUI, requires config)")
-	fmt.Println("  work ls               List sessions")
-	fmt.Println("  work new [filter]     Create session (interactive)")
-	fmt.Println("  work attach [n|name]  Attach to session")
-	fmt.Println("  work kill [n|name]    Stop session")
-	fmt.Println("  work peek [n|name]    Preview session output")
+	fmt.Println("  fusebox                  Dashboard (TUI, requires config)")
+	fmt.Println("  fusebox ls               List sessions")
+	fmt.Println("  fusebox new [filter]     Create session (interactive)")
+	fmt.Println("  fusebox attach [n|name]  Attach to session")
+	fmt.Println("  fusebox kill [n|name]    Stop session")
+	fmt.Println("  fusebox peek [n|name]    Preview session output")
 	fmt.Println()
 	fmt.Println("Server commands (JSON, called via SSH):")
-	fmt.Println("  work list|create|stop|dirs|preview|activity|install-hooks|fix-mouse|hook")
+	fmt.Println("  fusebox list|create|stop|dirs|preview|activity|install-hooks|fix-mouse|hook")
 }
 
 func localLs() {
@@ -96,7 +96,7 @@ func localLs() {
 	home, _ := os.UserHomeDir()
 	homeWork := home + "/work/"
 	now := time.Now().Unix()
-	activity := readActivityDir("/tmp/work-cli", 60)
+	activity := readActivityDir("/tmp/fusebox", 60)
 
 	fmt.Println()
 	for i, s := range sessions {

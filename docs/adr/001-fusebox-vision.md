@@ -14,9 +14,9 @@ The original concept was **fusebox.cc**: a product that uses userspace FUSE to m
 
 ## Decision
 
-Build `work` as the spiritual successor to fusebox.cc. Replace literal FUSE with mutagen (or equivalent bidirectional sync). The core value proposition is unchanged:
+Build `fusebox` as the spiritual successor to fusebox.cc. Replace literal FUSE with mutagen (or equivalent bidirectional sync). The core value proposition is unchanged:
 
-**Point `work` at a server. It installs itself, syncs your code, and gives you safe, persistent, phone-controllable Claude sessions.**
+**Point `fusebox` at a server. It installs itself, syncs your code, and gives you safe, persistent, phone-controllable Claude sessions.**
 
 ### Architecture
 
@@ -26,7 +26,7 @@ Your Mac                              Remote Server
 │ ~/projects/foo/  │ ◄── mutagen ──► │ ~/projects/foo/  │
 │ ~/projects/bar/  │    (real-time)   │ ~/projects/bar/  │
 ├──────────────────┤                  ├──────────────────┤
-│ work (TUI)       │ ── SSH ────────► │ work (server)    │
+│ fusebox (TUI)    │ ── SSH ────────► │ fusebox (server) │
 │                  │ ◄── JSON ─────── │                  │
 └──────────────────┘                  │ tmux sessions:   │
                                       │  foo: claude     │
@@ -37,19 +37,19 @@ Your Mac                              Remote Server
 ### The "one-click" flow
 
 ```
-$ work init user@myserver.example.com
+$ fusebox init user@myserver.example.com
 ```
 
 1. **Connect** — SSH to server, verify access
-2. **Deploy** — SCP the `work` binary to `~/bin/work`
+2. **Deploy** — SCP the `fusebox` binary to `~/bin/fusebox`
 3. **Discover** — List directories on the server (or offer to create `~/projects/`)
 4. **Pick roots** — User selects which directories to browse for sessions
 5. **Sync setup** — Install mutagen if needed, create sync sessions for selected roots
 6. **Hooks** — Install Claude Code PostToolUse hook for activity tracking
-7. **Config** — Write `~/.config/work-cli/config.yaml` with all settings
+7. **Config** — Write `~/.config/fusebox/config.yaml` with all settings
 8. **Launch** — Open the TUI dashboard
 
-After init, `work` just works. `work new` creates a session + sync. `work kill` stops the session. The dashboard shows per-session sync status.
+After init, `fusebox` just works. `fusebox new` creates a session + sync. `fusebox kill` stops the session. The dashboard shows per-session sync status.
 
 ### Why mutagen (not FUSE)
 
@@ -61,7 +61,7 @@ After init, `work` just works. `work new` creates a session + sync. `work kill` 
 | IDE compat | Flaky (fsevents, indexing) | Perfect (real local files) |
 | Conflict handling | Last-write-wins | Three-way merge, configurable |
 
-Mutagen gives us the same bidirectional sync with none of the FUSE pain. The agent binary auto-deploys to remotes — same pattern as `work` itself.
+Mutagen gives us the same bidirectional sync with none of the FUSE pain. The agent binary auto-deploys to remotes — same pattern as `fusebox` itself.
 
 ### Why not containers / devcontainers
 
@@ -79,19 +79,19 @@ If an agent goes rogue, the blast radius is one remote server. Your local machin
 
 ### Managed sync lifecycle
 
-Today mutagen is external — user installs and configures it separately. The goal is for `work` to own the sync lifecycle:
+Today mutagen is external — user installs and configures it separately. The goal is for `fusebox` to own the sync lifecycle:
 
 | Action | Today | Goal |
 |---|---|---|
-| Install mutagen | Manual | `work init` handles it |
-| Create sync session | `mutagen sync create ...` | `work new` does it automatically |
+| Install mutagen | Manual | `fusebox init` handles it |
+| Create sync session | `mutagen sync create ...` | `fusebox new` does it automatically |
 | Monitor sync | `mutagen sync list` | Dashboard shows per-session status |
-| Pause sync | `mutagen sync pause ...` | `work pause <session>` |
-| Teardown | `mutagen sync terminate ...` | `work kill` cleans up |
+| Pause sync | `mutagen sync pause ...` | `fusebox pause <session>` |
+| Teardown | `mutagen sync terminate ...` | `fusebox kill` cleans up |
 
 ## What exists today
 
-- `work` binary — unified TUI dashboard + server CLI + JSON server commands
+- `fusebox` binary — unified TUI dashboard + server CLI + JSON server commands
 - Session management — create, stop, attach, preview via tmux
 - Activity monitoring — PostToolUse hook tracks what Claude is doing per-session
 - Deploy — `make deploy` SCPs binary to server, installs hooks
@@ -99,15 +99,15 @@ Today mutagen is external — user installs and configures it separately. The go
 
 ## What's next
 
-1. **`work init` wizard** — interactive TUI for first-time setup (immediate next step)
-2. **Managed mutagen sessions** — `work new` creates sync + tmux session together
+1. **`fusebox init` wizard** — interactive TUI for first-time setup (immediate next step)
+2. **Managed mutagen sessions** — `fusebox new` creates sync + tmux session together
 3. **Per-session sync status** — dashboard shows sync state per session, not just global
-4. **`work pause/resume`** — control sync per session
-5. **Auto-install mutagen** — detect platform, download, install during `work init`
+4. **`fusebox pause/resume`** — control sync per session
+5. **Auto-install mutagen** — detect platform, download, install during `fusebox init`
 
 ## Consequences
 
-- `work` becomes opinionated about mutagen as the sync layer (but still works without it)
+- `fusebox` becomes opinionated about mutagen as the sync layer (but still works without it)
 - The setup flow must handle mutagen installation across macOS and Linux
 - Sync configuration (ignores, conflict resolution) needs sensible defaults
 - The binary grows in scope from "session manager" to "remote development environment manager"

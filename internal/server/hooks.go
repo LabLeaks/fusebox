@@ -50,7 +50,7 @@ func updateHooksSettings(settingsData []byte, hookCmd string) ([]byte, string, e
 		}
 	}
 
-	// Remove old-format entries (without "hooks" key) and old work-hook entries
+	// Remove old-format entries (without "hooks" key) and old fusebox-hook entries
 	var filtered []any
 	for _, entry := range postToolUseRaw {
 		m, ok := entry.(map[string]any)
@@ -61,7 +61,7 @@ func updateHooksSettings(settingsData []byte, hookCmd string) ([]byte, string, e
 		if !ok {
 			continue // old format, skip
 		}
-		// Skip entries pointing to old work-hook binary
+		// Skip entries pointing to old fusebox-hook binary
 		isOld := false
 		for _, h := range hooksList {
 			hm, ok := h.(map[string]any)
@@ -69,7 +69,7 @@ func updateHooksSettings(settingsData []byte, hookCmd string) ([]byte, string, e
 				continue
 			}
 			cmd, _ := hm["command"].(string)
-			if strings.HasSuffix(cmd, "/work-hook") {
+			if strings.HasSuffix(cmd, "/fusebox-hook") {
 				isOld = true
 				break
 			}

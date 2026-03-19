@@ -21,6 +21,16 @@ func doCreate(name, dir string, opts createOpts) (string, error) {
 		dir = home + dir[1:]
 	}
 
+	// Auto-start sandbox if enabled but not running
+	if sandboxEnabled() && tmuxSocket == "" {
+		CmdUp()
+		// Re-detect socket after starting
+		sock := os.ExpandEnv("$HOME/.fusebox/tmux.sock")
+		if info, err := os.Stat(sock); err == nil && !info.IsDir() {
+			tmuxSocket = sock
+		}
+	}
+
 	// Check directory exists
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
@@ -43,7 +53,7 @@ func doCreate(name, dir string, opts createOpts) (string, error) {
 	if opts.Resume {
 		tmuxCmd += " --resume"
 	}
-	args := []string{"new-session", "-d", "-s", name, "-c", dir, "-e", "WORK_SESSION=" + name}
+	args := []string{"new-session", "-d", "-s", name, "-c", dir, "-e", "FUSEBOX_SESSION=" + name}
 	if opts.Teams {
 		args = append(args, "-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 	}

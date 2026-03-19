@@ -92,6 +92,11 @@ func NewManager(runner ssh.Runner, serverPath string) *Manager {
 	return &Manager{SSH: runner, serverPath: serverPath}
 }
 
+// ServerPath returns the path to the work binary on the server.
+func (m *Manager) ServerPath() string {
+	return m.serverPath
+}
+
 func (m *Manager) List() ([]Session, error) {
 	out, err := m.SSH.Run(m.serverPath + " list")
 	if err != nil {

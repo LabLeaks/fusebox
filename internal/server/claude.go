@@ -9,7 +9,16 @@ import (
 )
 
 // DetectClaude finds the claude binary by checking well-known paths, then PATH.
+// If running inside a sandbox (tmuxSocket is set), uses the known rootfs path.
 func DetectClaude() (string, error) {
+	// Inside a sandbox, claude is at a known path in the rootfs
+	if tmuxSocket != "" {
+		sandboxPath := "/usr/local/bin/claude"
+		if _, err := os.Stat(sandboxPath); err == nil {
+			return sandboxPath, nil
+		}
+	}
+
 	home, _ := os.UserHomeDir()
 	candidates := []string{
 		filepath.Join(home, ".local", "bin", "claude"),

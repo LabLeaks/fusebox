@@ -19,6 +19,7 @@ const (
 	stepHost     initStep = iota
 	stepUser     initStep = iota
 	stepConnect  initStep = iota
+	stepSandbox  initStep = iota
 	stepDirs     initStep = iota
 	stepSettings initStep = iota
 	stepWrite    initStep = iota
@@ -53,6 +54,9 @@ type InitModel struct {
 	launch      bool
 	reconfig    bool
 	passthrough bool // tmux allow-passthrough
+	sandboxOK   bool // server supports sandboxing
+	sandboxWhy  string // reason if not supported
+	sandboxOn   bool // user chose to enable sandbox
 }
 
 // NewInit creates an init wizard model. hostArg is the optional user@host argument.
@@ -193,8 +197,16 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.connectSub = subDiscover
-		m.progress = "Binary deployed · Scanning directories..."
-		return m, discoverDirsCmd(m.host, m.user, m.homeDir, m.sshFactory)
+		m.progress = "Binary deployed · Detecting sandbox support..."
+		return m, tea.Batch(
+			detectSandboxCmd(m.host, m.user, m.sshFactory),
+			discoverDirsCmd(m.host, m.user, m.homeDir, m.sshFactory),
+		)
+
+	case sandboxDetectedMsg:
+		m.sandboxOK = msg.supported
+		m.sandboxWhy = msg.reason
+		return m, nil
 
 	case dirsFoundMsg:
 		if msg.err != nil {
@@ -215,7 +227,12 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.browser.SetRootEntries(entries)
 		}
 		m.browser.SetEntries(entries)
-		m.step = stepDirs
+		// Show sandbox step before dirs on first discovery
+		if m.step == stepConnect {
+			m.step = stepSandbox
+		} else {
+			m.step = stepDirs
+		}
 		m.err = nil
 		return m, nil
 
@@ -238,6 +255,8 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateUser(msg)
 	case stepConnect:
 		return m, nil // async — no user input
+	case stepSandbox:
+		return m.updateSandbox(msg)
 	case stepDirs:
 		return m.updateDirs(msg)
 	case stepSettings:
@@ -296,6 +315,26 @@ func (m InitModel) updateUser(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.userInput, cmd = m.userInput.Update(msg)
 	return m, cmd
+}
+
+func (m InitModel) updateSandbox(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch kmsg.String() {
+		case "s":
+			if m.sandboxOK {
+				m.sandboxOn = !m.sandboxOn
+			}
+			return m, nil
+		case keyAttach: // enter — continue to dirs
+			m.step = stepDirs
+			return m, nil
+		case keyEsc:
+			m.step = stepUser
+			m.userInput.Focus()
+			return m, nil
+		}
+	}
+	return m, nil
 }
 
 func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -362,7 +401,7 @@ func (m InitModel) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for path := range m.selected {
 				roots = append(roots, path)
 			}
-			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sshFactory)
+			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sandboxOn, m.sshFactory)
 		case keyEsc:
 			m.step = stepDirs
 			return m, nil
@@ -387,7 +426,7 @@ func (m InitModel) updateDone(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m InitModel) View() tea.View {
 	var b strings.Builder
 
-	title := "  WORK  ·  Setup"
+	title := "  FUSEBOX  ·  Setup"
 	if m.reconfig {
 		title += " (reconfiguring)"
 	}
@@ -398,6 +437,7 @@ func (m InitModel) View() tea.View {
 	m.renderStepLine(&b, stepHost, "Server", m.host)
 	m.renderStepLine(&b, stepUser, "Username", m.user)
 	m.renderConnectLine(&b)
+	m.renderSandboxLine(&b)
 	m.renderDirsLine(&b)
 	m.renderSettingsLine(&b)
 	m.renderWriteLine(&b)
@@ -420,6 +460,23 @@ func (m InitModel) View() tea.View {
 		b.WriteString("\n")
 	case stepConnect:
 		// progress shown in step line
+	case stepSandbox:
+		b.WriteString("  Sandbox isolation:\n\n")
+		if m.sandboxOK {
+			ind := checkOff.String()
+			if m.sandboxOn {
+				ind = checkOn.String()
+			}
+			b.WriteString(fmt.Sprintf("  %s  Enable namespace isolation  [s]\n", ind))
+			b.WriteString(helpStyle.Render("        Runs Claude in an isolated sandbox with OverlayFS."))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(helpStyle.Render(fmt.Sprintf("    Not available: %s", m.sandboxWhy)))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("  [enter] continue  [esc] back"))
+		b.WriteString("\n")
 	case stepDirs:
 		b.WriteString("  Select browse roots (directories scanned for projects):\n")
 		if path := m.browser.DisplayPath(); path != "" {
@@ -514,6 +571,23 @@ func (m InitModel) renderConnectLine(b *strings.Builder) {
 	}
 }
 
+func (m InitModel) renderSandboxLine(b *strings.Builder) {
+	if m.step > stepSandbox {
+		info := "off"
+		if m.sandboxOn {
+			info = "enabled"
+		}
+		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %s", "Sandbox", info)))
+		b.WriteString("\n")
+	} else if m.step == stepSandbox {
+		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %-12s", "Sandbox")))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Sandbox")))
+		b.WriteString("\n")
+	}
+}
+
 func (m InitModel) renderDirsLine(b *strings.Builder) {
 	if m.step > stepDirs {
 		count := len(m.selected)
@@ -550,7 +624,7 @@ func (m InitModel) renderSettingsLine(b *strings.Builder) {
 
 func (m InitModel) renderWriteLine(b *strings.Builder) {
 	if m.step > stepWrite {
-		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s ~/.config/work-cli/config.yaml", "Config")))
+		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s ~/.config/fusebox/config.yaml", "Config")))
 		b.WriteString("\n")
 	} else if m.step == stepWrite {
 		b.WriteString(fmt.Sprintf("  %s %-12s Writing config...",

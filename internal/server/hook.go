@@ -55,13 +55,13 @@ func extractDetail(input hookInput) string {
 }
 
 // CmdHook handles PostToolUse hook events from Claude Code.
-// Reads JSON from stdin, writes activity to /tmp/work-cli/<session>.json.
+// Reads JSON from stdin, writes activity to /tmp/fusebox/<session>.json.
 func CmdHook() {
-	statusDir := "/tmp/work-cli"
+	statusDir := "/tmp/fusebox"
 	os.MkdirAll(statusDir, 0755)
 
 	// Detect session name: prefer env var, fall back to tmux pane lookup
-	session := os.Getenv("WORK_SESSION")
+	session := os.Getenv("FUSEBOX_SESSION")
 	if session == "" {
 		if pane := os.Getenv("TMUX_PANE"); pane != "" {
 			out, err := tmuxRun("display-message", "-p", "-t", pane, "#{session_name}")

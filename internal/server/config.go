@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// LoadRoots reads browse roots from ~/.config/work-cli/roots.conf.
+// LoadRoots reads browse roots from ~/.config/fusebox/roots.conf.
 // Returns nil if the file doesn't exist.
 func LoadRoots() ([]string, error) {
 	home, _ := os.UserHomeDir()
-	path := filepath.Join(home, ".config", "work-cli", "roots.conf")
+	path := filepath.Join(home, ".config", "fusebox", "roots.conf")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

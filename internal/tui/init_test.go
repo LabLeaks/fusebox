@@ -29,7 +29,7 @@ func TestInit_ShowsSetupHeader(t *testing.T) {
 	mock := testutil.NewMockSSH()
 	tm := newInitApp(t, "", mock)
 
-	waitForAll(t, tm, "WORK", "Setup", "Server")
+	waitForAll(t, tm, "FUSEBOX", "Setup", "Server")
 }
 
 func TestInit_HostToUser(t *testing.T) {

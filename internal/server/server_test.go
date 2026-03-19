@@ -133,7 +133,7 @@ func TestParseRoots(t *testing.T) {
 // --- hooks settings tests ---
 
 func TestUpdateHooksSettings_EmptySettings(t *testing.T) {
-	out, msg, err := updateHooksSettings(nil, "/usr/bin/work-server hook")
+	out, msg, err := updateHooksSettings(nil, "/usr/bin/fusebox-server hook")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,8 +158,8 @@ func TestUpdateHooksSettings_EmptySettings(t *testing.T) {
 	}
 	hooksList := entry["hooks"].([]any)
 	hook := hooksList[0].(map[string]any)
-	if hook["command"] != "/usr/bin/work-server hook" {
-		t.Errorf("command = %q, want %q", hook["command"], "/usr/bin/work-server hook")
+	if hook["command"] != "/usr/bin/fusebox-server hook" {
+		t.Errorf("command = %q, want %q", hook["command"], "/usr/bin/fusebox-server hook")
 	}
 }
 
@@ -167,11 +167,11 @@ func TestUpdateHooksSettings_AlreadyInstalled(t *testing.T) {
 	input := []byte(`{
   "hooks": {
     "PostToolUse": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "/usr/bin/work-server hook"}]}
+      {"matcher": "", "hooks": [{"type": "command", "command": "/usr/bin/fusebox-server hook"}]}
     ]
   }
 }`)
-	out, msg, err := updateHooksSettings(input, "/usr/bin/work-server hook")
+	out, msg, err := updateHooksSettings(input, "/usr/bin/fusebox-server hook")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,11 +188,11 @@ func TestUpdateHooksSettings_RemovesOldWorkHook(t *testing.T) {
 	input := []byte(`{
   "hooks": {
     "PostToolUse": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "/home/user/bin/work-hook"}]}
+      {"matcher": "", "hooks": [{"type": "command", "command": "/home/user/bin/fusebox-hook"}]}
     ]
   }
 }`)
-	out, msg, err := updateHooksSettings(input, "/home/user/bin/work-server hook")
+	out, msg, err := updateHooksSettings(input, "/home/user/bin/fusebox-server hook")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,8 +210,8 @@ func TestUpdateHooksSettings_RemovesOldWorkHook(t *testing.T) {
 	entry := postToolUse[0].(map[string]any)
 	hooksList := entry["hooks"].([]any)
 	hook := hooksList[0].(map[string]any)
-	if hook["command"] != "/home/user/bin/work-server hook" {
-		t.Errorf("command = %q, want %q", hook["command"], "/home/user/bin/work-server hook")
+	if hook["command"] != "/home/user/bin/fusebox-server hook" {
+		t.Errorf("command = %q, want %q", hook["command"], "/home/user/bin/fusebox-server hook")
 	}
 }
 
@@ -220,11 +220,11 @@ func TestUpdateHooksSettings_RemovesOldFormat(t *testing.T) {
 	input := []byte(`{
   "hooks": {
     "PostToolUse": [
-      {"type": "command", "command": "/home/user/bin/work-hook"}
+      {"type": "command", "command": "/home/user/bin/fusebox-hook"}
     ]
   }
 }`)
-	out, msg, err := updateHooksSettings(input, "/home/user/bin/work-server hook")
+	out, msg, err := updateHooksSettings(input, "/home/user/bin/fusebox-server hook")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestUpdateHooksSettings_PreservesOtherHooks(t *testing.T) {
   },
   "other_setting": true
 }`)
-	out, msg, err := updateHooksSettings(input, "/home/user/bin/work-server hook")
+	out, msg, err := updateHooksSettings(input, "/home/user/bin/fusebox-server hook")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,13 +282,13 @@ func TestUpdateHooksSettings_PreservesOtherHooks(t *testing.T) {
 	entry1 := postToolUse[1].(map[string]any)
 	hooksList := entry1["hooks"].([]any)
 	hook := hooksList[0].(map[string]any)
-	if hook["command"] != "/home/user/bin/work-server hook" {
+	if hook["command"] != "/home/user/bin/fusebox-server hook" {
 		t.Errorf("new hook command = %q", hook["command"])
 	}
 }
 
 func TestUpdateHooksSettings_InvalidJSON(t *testing.T) {
-	_, _, err := updateHooksSettings([]byte("not json"), "/usr/bin/work-server hook")
+	_, _, err := updateHooksSettings([]byte("not json"), "/usr/bin/fusebox-server hook")
 	if err == nil {
 		t.Error("expected error for invalid JSON")
 	}

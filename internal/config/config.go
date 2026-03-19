@@ -12,8 +12,14 @@ type Config struct {
 	Server      Server   `yaml:"server"`
 	Claude      Claude   `yaml:"claude"`
 	Tmux        Tmux     `yaml:"tmux,omitempty"`
+	Sandbox     Sandbox  `yaml:"sandbox,omitempty"`
 	BrowseRoots []string `yaml:"browse_roots"`
 	ServerPath  string   `yaml:"helper_path"` // yaml tag unchanged for backward compat
+}
+
+type Sandbox struct {
+	Enabled bool   `yaml:"enabled,omitempty"`
+	DataDir string `yaml:"data_dir,omitempty"` // default: ~/.fusebox
 }
 
 type Server struct {
@@ -58,20 +64,33 @@ func (c Config) ResolveHomeDir() string {
 	return "/home/" + c.Server.User
 }
 
-// ResolveServerPath returns the server-side path to the work binary.
+// ResolveServerPath returns the server-side path to the fusebox binary.
 func (c Config) ResolveServerPath() string {
 	if c.ServerPath != "" {
 		return c.ServerPath
 	}
-	return c.ResolveHomeDir() + "/bin/work"
+	return c.ResolveHomeDir() + "/bin/fusebox"
+}
+
+// ResolveSandboxDataDir returns the sandbox data directory.
+func (c Config) ResolveSandboxDataDir() string {
+	if c.Sandbox.DataDir != "" {
+		return c.Sandbox.DataDir
+	}
+	return c.ResolveHomeDir() + "/.fusebox"
+}
+
+// SSHTarget returns user@host for mutagen and SSH commands.
+func (c Config) SSHTarget() string {
+	return c.Server.User + "@" + c.Server.Host
 }
 
 func configPath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "work-cli", "config.yaml")
+		return filepath.Join(xdg, "fusebox", "config.yaml")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "work-cli", "config.yaml")
+	return filepath.Join(home, ".config", "fusebox", "config.yaml")
 }
 
 func Save(cfg Config) error {

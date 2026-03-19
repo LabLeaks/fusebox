@@ -16,8 +16,9 @@ type Runner interface {
 
 // Client runs commands over SSH using the ssh binary.
 type Client struct {
-	Host string
-	User string
+	Host       string
+	User       string
+	TmuxSocket string // if set, tmux commands use -S socket
 }
 
 func NewClient(host, user string) *Client {
@@ -45,13 +46,21 @@ func (c *Client) Run(command string) ([]byte, error) {
 // AttachCmd builds an ssh -t command for attaching to a tmux session.
 // The caller is responsible for running this (e.g. via tea.ExecProcess).
 func (c *Client) AttachCmd(session string) *exec.Cmd {
+	if c.TmuxSocket != "" {
+		return exec.Command("ssh", "-t", c.target(),
+			"tmux", "-S", c.TmuxSocket, "attach-session", "-t", session)
+	}
 	return exec.Command("ssh", "-t", c.target(),
 		"tmux", "attach-session", "-t", session)
 }
 
 // AttachPaneCmd builds an ssh -t command that selects a specific pane then attaches.
 func (c *Client) AttachPaneCmd(session string, pane int) *exec.Cmd {
-	cmd := fmt.Sprintf("tmux select-pane -t %s:0.%d && tmux attach-session -t %s", session, pane, session)
+	tmux := "tmux"
+	if c.TmuxSocket != "" {
+		tmux = "tmux -S " + c.TmuxSocket
+	}
+	cmd := fmt.Sprintf("%s select-pane -t %s:0.%d && %s attach-session -t %s", tmux, session, pane, tmux, session)
 	return exec.Command("ssh", "-t", c.target(), "sh", "-c", cmd)
 }
 
@@ -59,6 +68,7 @@ func (c *Client) AttachPaneCmd(session string, pane int) *exec.Cmd {
 // Used when the TUI is running on the same host as the server.
 type LocalRunner struct {
 	ServerPath string
+	TmuxSocket string // if set, tmux commands use -S socket
 }
 
 func NewLocalRunner(serverPath string) *LocalRunner {
@@ -80,11 +90,18 @@ func (l *LocalRunner) Run(command string) ([]byte, error) {
 
 // AttachCmd builds a command to attach to a local tmux session.
 func (l *LocalRunner) AttachCmd(session string) *exec.Cmd {
+	if l.TmuxSocket != "" {
+		return exec.Command("tmux", "-S", l.TmuxSocket, "attach-session", "-t", session)
+	}
 	return exec.Command("tmux", "attach-session", "-t", session)
 }
 
 // AttachPaneCmd builds a command to select a pane and attach locally.
 func (l *LocalRunner) AttachPaneCmd(session string, pane int) *exec.Cmd {
-	cmd := fmt.Sprintf("tmux select-pane -t %s:0.%d && tmux attach-session -t %s", session, pane, session)
+	tmux := "tmux"
+	if l.TmuxSocket != "" {
+		tmux = "tmux -S " + l.TmuxSocket
+	}
+	cmd := fmt.Sprintf("%s select-pane -t %s:0.%d && %s attach-session -t %s", tmux, session, pane, tmux, session)
 	return exec.Command("sh", "-c", cmd)
 }

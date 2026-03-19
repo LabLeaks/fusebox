@@ -1,6 +1,9 @@
+internal/embed/fusebox-linux-*
 internal/embed/work-linux-*
+/fusebox
+/fusebox-server
 /work
 /work-cli
 /work-server
-/fusebox
+test/e2e/.scratch/
 .claude/

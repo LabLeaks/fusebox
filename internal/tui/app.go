@@ -54,6 +54,11 @@ type mutagenStatusMsg struct {
 	err    error
 }
 
+type sandboxStatusMsg struct {
+	running bool
+	err     error
+}
+
 type previewLoadedMsg struct {
 	content string
 	name    string
@@ -97,6 +102,7 @@ type Model struct {
 	create       createModel
 	activity     map[string]session.ToolActivity
 	mutagen      string
+	sandbox      string // sandbox status line
 	width        int
 	height       int
 	loading      bool
@@ -134,13 +140,17 @@ func NewWithRunner(cfg config.Config, runner ssh.Runner) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		loadSessionsCmd(m.manager),
 		loadActivityCmd(m.manager),
 		loadTeamsCmd(m.manager),
 		loadMutagenCmd(),
 		m.spinner.Tick,
-	)
+	}
+	if m.cfg.Sandbox.Enabled {
+		cmds = append(cmds, loadSandboxStatusCmd(m.manager))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -269,6 +279,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mutagen = mutagenErr.Render("mutagen: error")
 		} else if msg.status != "" {
 			m.mutagen = mutagenOK.Render("mutagen: " + msg.status)
+		}
+		return m, nil
+
+	case sandboxStatusMsg:
+		if msg.err != nil {
+			m.sandbox = mutagenErr.Render("sandbox: error")
+		} else if msg.running {
+			m.sandbox = mutagenOK.Render("sandbox: running")
+		} else {
+			m.sandbox = helpStyle.Render("sandbox: stopped")
 		}
 		return m, nil
 
@@ -571,7 +591,7 @@ func (m Model) View() tea.View {
 	switch m.view {
 	case viewDashboard:
 		if m.loading {
-			b.WriteString(headerStyle.Render("  WORK  ·  " + m.cfg.Server.Host))
+			b.WriteString(headerStyle.Render("  FUSEBOX  ·  " + m.cfg.Server.Host))
 			b.WriteString("\n\n")
 			b.WriteString(fmt.Sprintf("  %s Connecting to %s...", m.spinner.View(), m.cfg.Server.Host))
 			b.WriteString("\n")
@@ -592,9 +612,17 @@ func (m Model) View() tea.View {
 		b.WriteString(m.teamDetail.View())
 	}
 
-	if m.mutagen != "" {
+	if m.sandbox != "" || m.mutagen != "" {
 		b.WriteString("\n\n  ")
-		b.WriteString(m.mutagen)
+		if m.sandbox != "" {
+			b.WriteString(m.sandbox)
+			if m.mutagen != "" {
+				b.WriteString("  ")
+			}
+		}
+		if m.mutagen != "" {
+			b.WriteString(m.mutagen)
+		}
 	}
 
 	b.WriteString("\n")
@@ -728,6 +756,18 @@ func loadPanePreviewCmd(mgr *session.Manager, sessionName string, pane int) tea.
 	return func() tea.Msg {
 		content, err := mgr.PanePreview(sessionName, pane, 30)
 		return panePreviewLoadedMsg{content: content, pane: pane, err: err}
+	}
+}
+
+func loadSandboxStatusCmd(mgr *session.Manager) tea.Cmd {
+	return func() tea.Msg {
+		out, err := mgr.SSH.Run(mgr.ServerPath() + " sandbox-status")
+		if err != nil {
+			return sandboxStatusMsg{err: err}
+		}
+		// Parse the JSON response for "running" field
+		running := strings.Contains(string(out), `"running":true`)
+		return sandboxStatusMsg{running: running}
 	}
 }
 

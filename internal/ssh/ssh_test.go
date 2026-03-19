@@ -56,8 +56,8 @@ func TestClient_AttachPaneCmd(t *testing.T) {
 // --- LocalRunner ---
 
 func TestNewLocalRunner(t *testing.T) {
-	r := NewLocalRunner("/usr/local/bin/work")
-	if r.ServerPath != "/usr/local/bin/work" {
+	r := NewLocalRunner("/usr/local/bin/fusebox")
+	if r.ServerPath != "/usr/local/bin/fusebox" {
 		t.Errorf("expected server path, got %s", r.ServerPath)
 	}
 }

@@ -33,6 +33,11 @@ type configWrittenMsg struct {
 	err error
 }
 
+type sandboxDetectedMsg struct {
+	supported bool
+	reason    string
+}
+
 type dirEntry struct {
 	path  string
 	count int
@@ -81,12 +86,12 @@ func deployCmd(host, user, goarch, homeDir string, factory func(host, user strin
 
 		// Create bin directory
 		binDir := homeDir + "/bin"
-		if _, err := runner.Run("mkdir -p " + binDir + " ~/.config/work-cli"); err != nil {
+		if _, err := runner.Run("mkdir -p " + binDir + " ~/.config/fusebox"); err != nil {
 			return deployedMsg{err: fmt.Errorf("failed to create directories: %w", err)}
 		}
 
 		// Write binary to temp file locally, then SCP it
-		tmpFile, err := os.CreateTemp("", "work-server-*")
+		tmpFile, err := os.CreateTemp("", "fusebox-server-*")
 		if err != nil {
 			return deployedMsg{err: fmt.Errorf("failed to create temp file: %w", err)}
 		}
@@ -102,15 +107,15 @@ func deployCmd(host, user, goarch, homeDir string, factory func(host, user strin
 		}
 
 		// SCP the binary
-		target := fmt.Sprintf("%s@%s:%s/work", user, host, binDir)
+		target := fmt.Sprintf("%s@%s:%s/fusebox", user, host, binDir)
 		scpCmd := fmt.Sprintf("scp -q %s %s", tmpFile.Name(), target)
 		if _, err := runLocalCmd(scpCmd); err != nil {
 			return deployedMsg{err: fmt.Errorf("failed to upload binary: %w", err)}
 		}
 
-		// Symlink work-helper and run install-hooks + fix-mouse
+		// Symlink fusebox-helper and run install-hooks + fix-mouse
 		commands := fmt.Sprintf(
-			"ln -sf %s/work %s/work-helper && %s/work install-hooks && %s/work fix-mouse",
+			"ln -sf %s/fusebox %s/fusebox-helper && %s/fusebox install-hooks && %s/fusebox fix-mouse",
 			binDir, binDir, binDir, binDir,
 		)
 		if _, err := runner.Run(commands); err != nil {
@@ -157,8 +162,51 @@ func discoverDirsCmd(host, user, scanPath string, factory func(host, user string
 	}
 }
 
+// detectSandboxCmd checks if the server supports namespace isolation.
+func detectSandboxCmd(host, user string, factory func(host, user string) ssh.Runner) tea.Cmd {
+	return func() tea.Msg {
+		runner := factory(host, user)
+		// Check kernel version and user namespace support
+		out, err := runner.Run("uname -r && cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo ok && cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo ok")
+		if err != nil {
+			return sandboxDetectedMsg{supported: false, reason: "cannot detect kernel capabilities"}
+		}
+
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) < 1 {
+			return sandboxDetectedMsg{supported: false, reason: "unexpected response"}
+		}
+
+		// Parse kernel version
+		release := strings.TrimSpace(lines[0])
+		parts := strings.SplitN(release, ".", 3)
+		major, minor := 0, 0
+		if len(parts) >= 1 {
+			fmt.Sscanf(parts[0], "%d", &major)
+		}
+		if len(parts) >= 2 {
+			minorStr := strings.SplitN(parts[1], "-", 2)[0]
+			fmt.Sscanf(minorStr, "%d", &minor)
+		}
+
+		if major < 5 || (major == 5 && minor < 11) {
+			return sandboxDetectedMsg{supported: false, reason: fmt.Sprintf("kernel %s (need ≥5.11)", release)}
+		}
+
+		// Check user namespaces
+		if len(lines) > 1 && strings.TrimSpace(lines[1]) == "0" {
+			return sandboxDetectedMsg{supported: false, reason: "user namespaces disabled"}
+		}
+		if len(lines) > 2 && strings.TrimSpace(lines[2]) == "0" {
+			return sandboxDetectedMsg{supported: false, reason: "max_user_namespaces=0"}
+		}
+
+		return sandboxDetectedMsg{supported: true}
+	}
+}
+
 // writeConfigCmd writes the config file and roots.conf on the server.
-func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool, factory func(host, user string) ssh.Runner) tea.Cmd {
+func writeConfigCmd(host, user, homeDir string, roots []string, passthrough, sandboxOn bool, factory func(host, user string) ssh.Runner) tea.Cmd {
 	return func() tea.Msg {
 		// Build browse_roots with ~ prefix
 		browseRoots := make([]string, len(roots))
@@ -172,6 +220,7 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool
 		cfg.Server.HomeDir = homeDir
 		cfg.BrowseRoots = browseRoots
 		cfg.Tmux.Passthrough = passthrough
+		cfg.Sandbox.Enabled = sandboxOn
 
 		if err := config.Save(cfg); err != nil {
 			return configWrittenMsg{err: fmt.Errorf("failed to save config: %w", err)}
@@ -186,7 +235,7 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool
 				serverRoots = append(serverRoots, homeDir+"/"+r)
 			}
 			rootsContent := strings.Join(serverRoots, "\n")
-			cmd := fmt.Sprintf("cat > ~/.config/work-cli/roots.conf << 'ROOTSEOF'\n%s\nROOTSEOF", rootsContent)
+			cmd := fmt.Sprintf("cat > ~/.config/fusebox/roots.conf << 'ROOTSEOF'\n%s\nROOTSEOF", rootsContent)
 			if _, err := runner.Run(cmd); err != nil {
 				return configWrittenMsg{err: fmt.Errorf("failed to write roots.conf: %w", err)}
 			}
@@ -195,6 +244,13 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool
 		// Apply tmux passthrough setting on server
 		if passthrough {
 			runner.Run("tmux set -g allow-passthrough on 2>/dev/null; grep -q allow-passthrough ~/.tmux.conf 2>/dev/null || echo 'set -g allow-passthrough on' >> ~/.tmux.conf")
+		}
+
+		// Write sandbox enabled marker on server
+		if sandboxOn {
+			runner.Run("mkdir -p ~/.fusebox && touch ~/.fusebox/enabled")
+		} else {
+			runner.Run("rm -f ~/.fusebox/enabled 2>/dev/null")
 		}
 
 		return configWrittenMsg{}

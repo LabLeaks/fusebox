@@ -21,7 +21,7 @@ const (
 	testHost       = "test-server"
 	testUser       = "testuser"
 	testHome       = "/home/testuser"
-	testServerPath = testHome + "/bin/work"
+	testServerPath = testHome + "/bin/fusebox"
 )
 
 func testConfig() config.Config {
@@ -101,7 +101,7 @@ func TestDashboard_RendersSessions(t *testing.T) {
 
 	waitForAll(t, tm,
 		"project-a", "project-b",
-		"WORK", "test-server",
+		"FUSEBOX", "test-server",
 		"[n] new", "[q] quit",
 	)
 }
@@ -296,7 +296,7 @@ func TestCreate_ErrorShown(t *testing.T) {
 	// Space on root "work" creates session
 	tm.Send(tea.KeyPressMsg{Code: ' ', Text: " "})
 
-	waitFor(t, tm, "WORK")
+	waitFor(t, tm, "FUSEBOX")
 	waitFor(t, tm, "session already exists")
 }
 
@@ -328,7 +328,7 @@ func TestDashboard_SSHError(t *testing.T) {
 
 func TestDashboard_ListExitErrorShowsError(t *testing.T) {
 	mock := testutil.NewMockSSH()
-	// Simulate work-helper list failing with exit status (e.g., broken awk output).
+	// Simulate fusebox-helper list failing with exit status (e.g., broken awk output).
 	// Previously this was silently swallowed, hiding existing sessions.
 	mock.OnError(serverCmd("list"), fmt.Errorf("exit status 1"))
 	tm := newTestApp(t, mock)

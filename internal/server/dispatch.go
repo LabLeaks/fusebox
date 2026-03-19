@@ -8,6 +8,7 @@ var serverCommands = map[string]bool{
 	"preview": true, "activity": true, "install-hooks": true,
 	"fix-mouse": true, "hook": true,
 	"teams": true, "teams-toggle": true, "panes": true, "pane-preview": true,
+	"up": true, "down": true, "sandbox-status": true, "update": true,
 }
 
 // Dispatch handles server subcommands. Returns true if the command was handled.
@@ -20,24 +21,24 @@ func Dispatch(cmd string, args []string) bool {
 		CmdList()
 	case "create":
 		if len(args) < 2 {
-			ExitError("usage: work create <name> <dir>")
+			ExitError("usage: fusebox create <name> <dir>")
 		}
 		CmdCreate(args[0], args[1])
 	case "stop":
 		if len(args) < 1 {
-			ExitError("usage: work stop <name>")
+			ExitError("usage: fusebox stop <name>")
 		}
 		CmdStop(args[0])
 	case "dirs":
 		CmdDirs()
 	case "subdirs":
 		if len(args) < 1 {
-			ExitError("usage: work subdirs <path>")
+			ExitError("usage: fusebox subdirs <path>")
 		}
 		CmdSubdirs(args[0])
 	case "preview":
 		if len(args) < 1 {
-			ExitError("usage: work preview <name> [lines]")
+			ExitError("usage: fusebox preview <name> [lines]")
 		}
 		lines := "30"
 		if len(args) > 1 {
@@ -56,17 +57,17 @@ func Dispatch(cmd string, args []string) bool {
 		CmdTeams()
 	case "teams-toggle":
 		if len(args) < 1 {
-			ExitError("usage: work teams-toggle <on|off>")
+			ExitError("usage: fusebox teams-toggle <on|off>")
 		}
 		CmdTeamsToggle(args[0])
 	case "panes":
 		if len(args) < 1 {
-			ExitError("usage: work panes <session>")
+			ExitError("usage: fusebox panes <session>")
 		}
 		CmdPanes(args[0])
 	case "pane-preview":
 		if len(args) < 1 {
-			ExitError("usage: work pane-preview <session> <pane> [lines]")
+			ExitError("usage: fusebox pane-preview <session> <pane> [lines]")
 		}
 		pane := "0"
 		if len(args) > 1 {
@@ -79,19 +80,27 @@ func Dispatch(cmd string, args []string) bool {
 		CmdPanePreview(args[0], pane, lines)
 	case "create-team":
 		if len(args) < 2 {
-			ExitError("usage: work create-team <name> <dir>")
+			ExitError("usage: fusebox create-team <name> <dir>")
 		}
 		CmdCreateTeam(args[0], args[1])
 	case "create-resume":
 		if len(args) < 2 {
-			ExitError("usage: work create-resume <name> <dir>")
+			ExitError("usage: fusebox create-resume <name> <dir>")
 		}
 		CmdCreateResume(args[0], args[1])
 	case "create-team-resume":
 		if len(args) < 2 {
-			ExitError("usage: work create-team-resume <name> <dir>")
+			ExitError("usage: fusebox create-team-resume <name> <dir>")
 		}
 		CmdCreateTeamResume(args[0], args[1])
+	case "up":
+		CmdUp()
+	case "down":
+		CmdDown()
+	case "sandbox-status":
+		CmdSandboxStatus()
+	case "update":
+		CmdUpdate()
 	}
 	return true
 }

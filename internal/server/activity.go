@@ -49,5 +49,5 @@ func readActivityDir(statusDir string, maxAge int64) map[string]json.RawMessage 
 
 // CmdActivity reads tool activity files and outputs recent activity as JSON.
 func CmdActivity() {
-	writeJSON(readActivityDir("/tmp/work-cli", 60))
+	writeJSON(readActivityDir("/tmp/fusebox", 60))
 }

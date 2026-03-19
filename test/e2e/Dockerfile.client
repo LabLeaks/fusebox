@@ -1,0 +1,17 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-client \
+    bash \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create test user matching the client side
+RUN useradd -m -s /bin/bash testuser && \
+    mkdir -p /home/testuser/.ssh /home/testuser/.config/fusebox /home/testuser/.fusebox/bin /home/testuser/bin /home/testuser/projects && \
+    chown -R testuser:testuser /home/testuser
+
+# The fusebox binary, mutagen, and SSH key will be mounted/copied at runtime
+USER testuser
+WORKDIR /home/testuser

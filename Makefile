@@ -1,5 +1,5 @@
-BINARY     := work
-CONFIG     := $(HOME)/.config/work-cli/config.yaml
+BINARY     := fusebox
+CONFIG     := $(HOME)/.config/fusebox/config.yaml
 SERVER     ?= $(shell awk '/^server:/{found=1} found && /^ *host:/{print $$2; exit}' $(CONFIG) 2>/dev/null)
 SERVER_USER?= $(shell awk '/^server:/{found=1} found && /^ *user:/{print $$2; exit}' $(CONFIG) 2>/dev/null)
 REMOTE_BIN := /home/$(SERVER_USER)/bin
@@ -7,15 +7,15 @@ REMOTE_BIN := /home/$(SERVER_USER)/bin
 PREFIX     := $(HOME)/.local
 DESTDIR    :=
 
-.PHONY: build build-server install uninstall deploy setup clean test test-server release embed-server
+.PHONY: build build-server install uninstall deploy setup clean test test-server release embed-server rootfs
 
-## build: compile the work binary
+## build: compile the fusebox binary
 build:
 	go build -o $(BINARY) .
 
-## build-server: cross-compile work binary for linux/arm64
+## build-server: cross-compile fusebox binary for linux/arm64
 build-server:
-	GOOS=linux GOARCH=arm64 go build -o work-server .
+	GOOS=linux GOARCH=arm64 go build -o fusebox-server .
 
 ## install: build and install the client binary locally
 install: build
@@ -39,18 +39,18 @@ deploy: install build-server
 		printf 'server:\n  host: $(SERVER)\n  user: $(SERVER_USER)\n\nbrowse_roots:\n  - ~/work\n' > $(CONFIG); \
 		echo "Updated $(CONFIG)"; \
 	fi
-	ssh $(SERVER_USER)@$(SERVER) 'mkdir -p $(REMOTE_BIN) $$HOME/.config/work-cli'
-	scp work-server $(SERVER_USER)@$(SERVER):$(REMOTE_BIN)/work
-	ssh $(SERVER_USER)@$(SERVER) 'ln -sf $(REMOTE_BIN)/work $(REMOTE_BIN)/work-helper'
+	ssh $(SERVER_USER)@$(SERVER) 'mkdir -p $(REMOTE_BIN) $$HOME/.config/fusebox'
+	scp fusebox-server $(SERVER_USER)@$(SERVER):$(REMOTE_BIN)/fusebox
+	ssh $(SERVER_USER)@$(SERVER) 'ln -sf $(REMOTE_BIN)/fusebox $(REMOTE_BIN)/fusebox-helper'
 	@# Generate roots.conf from config.yaml browse_roots (skip if no browse_roots)
 	@ROOTS=$$(grep -A 50 'browse_roots:' $(CONFIG) 2>/dev/null | tail -n +2 | grep '^ *-' | sed 's/^ *- *//' | sed "s|^~|/home/$(SERVER_USER)|"); \
 	if [ -n "$$ROOTS" ]; then \
-		echo "$$ROOTS" | ssh $(SERVER_USER)@$(SERVER) 'cat > $$HOME/.config/work-cli/roots.conf'; \
+		echo "$$ROOTS" | ssh $(SERVER_USER)@$(SERVER) 'cat > $$HOME/.config/fusebox/roots.conf'; \
 	fi
-	ssh $(SERVER_USER)@$(SERVER) '$(REMOTE_BIN)/work install-hooks'
-	ssh $(SERVER_USER)@$(SERVER) '$(REMOTE_BIN)/work fix-mouse'
+	ssh $(SERVER_USER)@$(SERVER) '$(REMOTE_BIN)/fusebox install-hooks'
+	ssh $(SERVER_USER)@$(SERVER) '$(REMOTE_BIN)/fusebox fix-mouse'
 	@echo ""
-	@echo "Deployed: work binary + roots.conf."
+	@echo "Deployed: fusebox binary + roots.conf."
 
 ## setup: alias for deploy
 setup: deploy
@@ -63,15 +63,25 @@ test:
 test-server:
 	go test -tags integration -count=1 -v ./internal/server/
 
+## test-e2e: run end-to-end tests (needs docker)
+test-e2e:
+	test/e2e/run.sh
+
 ## release: build with embedded server binaries
 release: embed-server
 	go build -tags embed_server -o $(BINARY) .
 
 ## embed-server: cross-compile linux server binaries for embedding
 embed-server:
-	GOOS=linux GOARCH=arm64 go build -o internal/embed/work-linux-arm64 .
-	GOOS=linux GOARCH=amd64 go build -o internal/embed/work-linux-amd64 .
+	GOOS=linux GOARCH=arm64 go build -o internal/embed/fusebox-linux-arm64 .
+	GOOS=linux GOARCH=amd64 go build -o internal/embed/fusebox-linux-amd64 .
+
+## rootfs: build rootfs tarballs (requires Docker with buildx + QEMU)
+rootfs:
+	chmod +x rootfs/build.sh
+	rootfs/build.sh rootfs/
 
 ## clean: remove build artifacts
 clean:
-	rm -f $(BINARY) work-server internal/embed/work-linux-arm64 internal/embed/work-linux-amd64
+	rm -f $(BINARY) fusebox-server internal/embed/fusebox-linux-arm64 internal/embed/fusebox-linux-amd64
+	rm -f rootfs/fusebox-rootfs-*.tar.gz

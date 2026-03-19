@@ -3,14 +3,13 @@ version: 2
 project_name: fusebox
 
 builds:
-  - id: work
-    binary: work
+  - id: fusebox-darwin
+    binary: fusebox
     main: .
     env:
       - CGO_ENABLED=0
     goos:
       - darwin
-      - linux
     goarch:
       - amd64
       - arm64
@@ -18,12 +17,25 @@ builds:
       - embed_server
     hooks:
       pre:
-        - cmd: sh -c "GOOS=linux GOARCH=arm64 go build -o internal/embed/work-linux-arm64 . && GOOS=linux GOARCH=amd64 go build -o internal/embed/work-linux-amd64 ."
+        - cmd: sh -c "GOOS=linux GOARCH=arm64 go build -o internal/embed/fusebox-linux-arm64 . && GOOS=linux GOARCH=amd64 go build -o internal/embed/fusebox-linux-amd64 ."
+
+  - id: fusebox-linux
+    binary: fusebox
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - embed_server
 
 archives:
   - id: binaries
     format: binary
-    name_template: "work-{{ .Os }}-{{ .Arch }}"
+    name_template: "fusebox-{{ .Os }}-{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
@@ -32,6 +44,8 @@ release:
   github:
     owner: lableaks
     name: fusebox
+  extra_files:
+    - glob: rootfs/fusebox-rootfs-*.tar.gz
 
 changelog:
   sort: asc

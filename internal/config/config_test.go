@@ -59,13 +59,13 @@ func TestResolveHomeDir(t *testing.T) {
 
 func TestResolveServerPath(t *testing.T) {
 	cfg := Config{Server: Server{User: "alice"}}
-	if got := cfg.ResolveServerPath(); got != "/home/alice/bin/work" {
-		t.Errorf("expected /home/alice/bin/work, got %s", got)
+	if got := cfg.ResolveServerPath(); got != "/home/alice/bin/fusebox" {
+		t.Errorf("expected /home/alice/bin/fusebox, got %s", got)
 	}
 
-	cfg.ServerPath = "/opt/bin/work"
-	if got := cfg.ResolveServerPath(); got != "/opt/bin/work" {
-		t.Errorf("expected /opt/bin/work, got %s", got)
+	cfg.ServerPath = "/opt/bin/fusebox"
+	if got := cfg.ResolveServerPath(); got != "/opt/bin/fusebox" {
+		t.Errorf("expected /opt/bin/fusebox, got %s", got)
 	}
 }
 

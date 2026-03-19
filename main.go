@@ -9,8 +9,18 @@ import (
 
 	"github.com/lableaks/work-cli/internal/config"
 	"github.com/lableaks/work-cli/internal/server"
+	"github.com/lableaks/work-cli/internal/ssh"
 	"github.com/lableaks/work-cli/internal/tui"
 )
+
+// isLocalHost checks if the configured host matches the current machine.
+func isLocalHost(host string) bool {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return false
+	}
+	return hostname == host
+}
 
 func main() {
 	// Server subcommands dispatch first (used via SSH from TUI, must always work)
@@ -66,7 +76,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	model := tui.New(cfg)
+	// If we're on the server, use local execution instead of SSH
+	var model tui.Model
+	if isLocalHost(cfg.Server.Host) {
+		runner := ssh.NewLocalRunner(cfg.ResolveServerPath())
+		model = tui.NewWithRunner(cfg, runner)
+	} else {
+		model = tui.New(cfg)
+	}
 	p := tea.NewProgram(model)
 
 	if _, err := p.Run(); err != nil {

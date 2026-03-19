@@ -54,3 +54,37 @@ func (c *Client) AttachPaneCmd(session string, pane int) *exec.Cmd {
 	cmd := fmt.Sprintf("tmux select-pane -t %s:0.%d && tmux attach-session -t %s", session, pane, session)
 	return exec.Command("ssh", "-t", c.target(), "sh", "-c", cmd)
 }
+
+// LocalRunner executes commands directly on the local machine (no SSH).
+// Used when the TUI is running on the same host as the server.
+type LocalRunner struct {
+	ServerPath string
+}
+
+func NewLocalRunner(serverPath string) *LocalRunner {
+	return &LocalRunner{ServerPath: serverPath}
+}
+
+// Run executes a command locally via sh -c.
+func (l *LocalRunner) Run(command string) ([]byte, error) {
+	cmd := exec.Command("sh", "-c", command)
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return out, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+	}
+	return out, err
+}
+
+// AttachCmd builds a command to attach to a local tmux session.
+func (l *LocalRunner) AttachCmd(session string) *exec.Cmd {
+	return exec.Command("tmux", "attach-session", "-t", session)
+}
+
+// AttachPaneCmd builds a command to select a pane and attach locally.
+func (l *LocalRunner) AttachPaneCmd(session string, pane int) *exec.Cmd {
+	cmd := fmt.Sprintf("tmux select-pane -t %s:0.%d && tmux attach-session -t %s", session, pane, session)
+	return exec.Command("sh", "-c", cmd)
+}

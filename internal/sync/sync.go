@@ -56,6 +56,11 @@ func (m *Manager) Add(localPath string) error {
 		return fmt.Errorf("resolve path: %w", err)
 	}
 
+	// Guard against nested syncs
+	if err := m.checkNested(abs); err != nil {
+		return err
+	}
+
 	// Ensure the remote sync directory exists
 	name := filepath.Base(abs)
 	mkdirCmd := exec.Command("ssh", m.SSHTarget, "mkdir", "-p", "~/.fusebox/sync/"+name)
@@ -148,6 +153,38 @@ func (m *Manager) EnsureMutagen() error {
 		return nil
 	}
 	return installMutagen(filepath.Join(m.DataDir, "bin"))
+}
+
+// checkNested returns an error if the path overlaps with an existing sync.
+func (m *Manager) checkNested(abs string) error {
+	existing, err := m.List()
+	if err != nil {
+		return nil // can't check, allow it
+	}
+	return checkNestedAgainst(existing, abs)
+}
+
+// checkNestedAgainst checks a path against a list of existing syncs.
+func checkNestedAgainst(existing []SyncSession, abs string) error {
+	absSlash := abs + "/"
+	for _, s := range existing {
+		other := s.Local
+		if other == "" {
+			continue
+		}
+		otherSlash := other + "/"
+
+		if abs == other {
+			return fmt.Errorf("already syncing %s", other)
+		}
+		if strings.HasPrefix(absSlash, otherSlash) {
+			return fmt.Errorf("%s is inside already-synced %s", abs, other)
+		}
+		if strings.HasPrefix(otherSlash, absSlash) {
+			return fmt.Errorf("%s contains already-synced %s", abs, other)
+		}
+	}
+	return nil
 }
 
 // parseMutagenList parses `mutagen sync list` text output into sessions.

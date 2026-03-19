@@ -9,8 +9,8 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 
-	"github.com/lableaks/work-cli/internal/config"
-	"github.com/lableaks/work-cli/internal/ssh"
+	"github.com/lableaks/fusebox/internal/config"
+	"github.com/lableaks/fusebox/internal/ssh"
 )
 
 type initStep int

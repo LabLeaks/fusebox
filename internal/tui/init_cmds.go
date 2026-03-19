@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lableaks/work-cli/internal/config"
-	embedpkg "github.com/lableaks/work-cli/internal/embed"
-	"github.com/lableaks/work-cli/internal/ssh"
+	"github.com/lableaks/fusebox/internal/config"
+	embedpkg "github.com/lableaks/fusebox/internal/embed"
+	"github.com/lableaks/fusebox/internal/ssh"
 )
 
 // Messages for init wizard async operations.

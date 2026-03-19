@@ -1,4 +1,4 @@
-module github.com/lableaks/work-cli
+module github.com/lableaks/fusebox
 
 go 1.26.1
 

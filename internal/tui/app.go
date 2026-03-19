@@ -11,9 +11,9 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 
-	"github.com/lableaks/work-cli/internal/config"
-	"github.com/lableaks/work-cli/internal/session"
-	"github.com/lableaks/work-cli/internal/ssh"
+	"github.com/lableaks/fusebox/internal/config"
+	"github.com/lableaks/fusebox/internal/session"
+	"github.com/lableaks/fusebox/internal/ssh"
 )
 
 type view int

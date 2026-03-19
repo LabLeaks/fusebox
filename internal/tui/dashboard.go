@@ -9,7 +9,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
 
-	"github.com/lableaks/work-cli/internal/session"
+	"github.com/lableaks/fusebox/internal/session"
 )
 
 type dashboardModel struct {

@@ -9,9 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/lableaks/work-cli/internal/config"
-	"github.com/lableaks/work-cli/internal/testutil"
-	"github.com/lableaks/work-cli/internal/tui"
+	"github.com/lableaks/fusebox/internal/config"
+	"github.com/lableaks/fusebox/internal/testutil"
+	"github.com/lableaks/fusebox/internal/tui"
 )
 
 const waitTimeout = 3 * time.Second

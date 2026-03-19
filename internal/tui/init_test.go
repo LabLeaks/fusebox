@@ -8,9 +8,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/lableaks/work-cli/internal/ssh"
-	"github.com/lableaks/work-cli/internal/testutil"
-	"github.com/lableaks/work-cli/internal/tui"
+	"github.com/lableaks/fusebox/internal/ssh"
+	"github.com/lableaks/fusebox/internal/testutil"
+	"github.com/lableaks/fusebox/internal/tui"
 )
 
 // newInitApp creates a test init model wired to a mock SSH factory.

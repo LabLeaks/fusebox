@@ -7,10 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lableaks/work-cli/internal/config"
-	"github.com/lableaks/work-cli/internal/server"
-	"github.com/lableaks/work-cli/internal/ssh"
-	"github.com/lableaks/work-cli/internal/tui"
+	"github.com/lableaks/fusebox/internal/config"
+	"github.com/lableaks/fusebox/internal/server"
+	"github.com/lableaks/fusebox/internal/ssh"
+	"github.com/lableaks/fusebox/internal/tui"
 )
 
 // isLocalHost checks if the configured host matches the current machine.

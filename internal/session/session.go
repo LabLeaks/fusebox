@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lableaks/work-cli/internal/ssh"
+	"github.com/lableaks/fusebox/internal/ssh"
 )
 
 type Session struct {

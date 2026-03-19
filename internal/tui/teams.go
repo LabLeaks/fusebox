@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/viewport"
 
-	"github.com/lableaks/work-cli/internal/session"
+	"github.com/lableaks/fusebox/internal/session"
 )
 
 type teamDetailModel struct {

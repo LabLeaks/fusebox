@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lableaks/work-cli/internal/session"
+	"github.com/lableaks/fusebox/internal/session"
 )
 
 // Messages for create view async operations.

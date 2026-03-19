@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="lableaks/work-cli"
+REPO="lableaks/fusebox"
 INSTALL_DIR="${HOME}/.local/bin"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')

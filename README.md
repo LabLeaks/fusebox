@@ -1,6 +1,6 @@
-# work-cli
+# fusebox
 
-One binary for managing Claude Code tmux sessions — everywhere. On your Mac it's a TUI dashboard, on the server it's an interactive CLI, via SSH it speaks JSON.
+Remote Claude Code session manager. One binary — TUI dashboard on your machine, interactive CLI on the server, JSON over SSH.
 
 ```
 ┌───────────────────────────────────────────────┐
@@ -31,7 +31,7 @@ One binary for managing Claude Code tmux sessions — everywhere. On your Mac it
 ### Quick start (no Go needed)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/lableaks/work-cli/master/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/lableaks/fusebox/master/install.sh | bash
 work init user@your-server
 ```
 

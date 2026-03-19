@@ -1,1 +1,6 @@
 internal/embed/work-linux-*
+/work
+/work-cli
+/work-server
+/fusebox
+.claude/

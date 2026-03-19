@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
 
-	"github.com/lableaks/work-cli/internal/session"
+	"github.com/lableaks/fusebox/internal/session"
 )
 
 // dirBrowserEntry is a directory with its subdirectory count.

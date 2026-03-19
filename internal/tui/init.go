@@ -16,12 +16,13 @@ import (
 type initStep int
 
 const (
-	stepHost    initStep = iota
-	stepUser    initStep = iota
-	stepConnect initStep = iota
-	stepDirs    initStep = iota
-	stepWrite   initStep = iota
-	stepDone    initStep = iota
+	stepHost     initStep = iota
+	stepUser     initStep = iota
+	stepConnect  initStep = iota
+	stepDirs     initStep = iota
+	stepSettings initStep = iota
+	stepWrite    initStep = iota
+	stepDone     initStep = iota
 )
 
 type initConnectSub int
@@ -46,11 +47,12 @@ type InitModel struct {
 	spinner    spinner.Model
 	progress   string
 	connectSub initConnectSub
-	err        error
-	width      int
-	height     int
-	launch     bool
-	reconfig   bool
+	err         error
+	width       int
+	height      int
+	launch      bool
+	reconfig    bool
+	passthrough bool // tmux allow-passthrough
 }
 
 // NewInit creates an init wizard model. hostArg is the optional user@host argument.
@@ -238,6 +240,8 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // async — no user input
 	case stepDirs:
 		return m.updateDirs(msg)
+	case stepSettings:
+		return m.updateSettings(msg)
 	case stepWrite:
 		return m, nil // async
 	case stepDone:
@@ -322,12 +326,8 @@ func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.selected) == 0 {
 			return m, nil
 		}
-		m.step = stepWrite
-		var roots []string
-		for path := range m.selected {
-			roots = append(roots, path)
-		}
-		return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.sshFactory)
+		m.step = stepSettings
+		return m, nil
 	case dirBrowserDrillIn:
 		return m, discoverDirsCmd(m.host, m.user, m.browser.absPath, m.sshFactory)
 	case dirBrowserDrillUp:
@@ -338,6 +338,27 @@ func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+func (m InitModel) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch kmsg.String() {
+		case "p":
+			m.passthrough = !m.passthrough
+			return m, nil
+		case keyAttach: // enter — save and continue
+			m.step = stepWrite
+			var roots []string
+			for path := range m.selected {
+				roots = append(roots, path)
+			}
+			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sshFactory)
+		case keyEsc:
+			m.step = stepDirs
+			return m, nil
+		}
+	}
+	return m, nil
 }
 
 func (m InitModel) updateDone(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -368,6 +389,7 @@ func (m InitModel) View() tea.View {
 	m.renderStepLine(&b, stepUser, "Username", m.user)
 	m.renderConnectLine(&b)
 	m.renderDirsLine(&b)
+	m.renderSettingsLine(&b)
 	m.renderWriteLine(&b)
 
 	b.WriteString("\n")
@@ -420,6 +442,17 @@ func (m InitModel) View() tea.View {
 			help += "  [esc] back"
 		}
 		b.WriteString(helpStyle.Render(help))
+		b.WriteString("\n")
+	case stepSettings:
+		b.WriteString("  Session options:\n\n")
+		pt := checkOff.String()
+		if m.passthrough {
+			pt = checkOn.String()
+		}
+		b.WriteString(fmt.Sprintf("  %s  Clickable links in tmux  [p]\n", pt))
+		b.WriteString(helpStyle.Render("        Enables tmux allow-passthrough so embedded hyperlinks work."))
+		b.WriteString("\n\n")
+		b.WriteString(helpStyle.Render("  [enter] save  [esc] back"))
 		b.WriteString("\n")
 	case stepWrite:
 		// progress shown in step line
@@ -481,6 +514,26 @@ func (m InitModel) renderDirsLine(b *strings.Builder) {
 		b.WriteString("\n")
 	} else {
 		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Browse Roots")))
+		b.WriteString("\n")
+	}
+}
+
+func (m InitModel) renderSettingsLine(b *strings.Builder) {
+	if m.step > stepSettings {
+		info := ""
+		if m.passthrough {
+			info = "passthrough on"
+		}
+		if info == "" {
+			info = "defaults"
+		}
+		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %s", "Options", info)))
+		b.WriteString("\n")
+	} else if m.step == stepSettings {
+		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %-12s", "Options")))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Options")))
 		b.WriteString("\n")
 	}
 }

@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Server      Server   `yaml:"server"`
 	Claude      Claude   `yaml:"claude"`
+	Tmux        Tmux     `yaml:"tmux,omitempty"`
 	BrowseRoots []string `yaml:"browse_roots"`
 	ServerPath  string   `yaml:"helper_path"` // yaml tag unchanged for backward compat
 }
@@ -24,6 +25,10 @@ type Server struct {
 type Claude struct {
 	Flags string `yaml:"flags"`
 	Teams bool   `yaml:"teams,omitempty"`
+}
+
+type Tmux struct {
+	Passthrough bool `yaml:"passthrough,omitempty"`
 }
 
 func DefaultConfig() Config {

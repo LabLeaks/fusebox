@@ -299,6 +299,12 @@ func (m InitModel) updateUser(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Enter with selections = done (skip browser's drill-in)
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok && kmsg.String() == keyAttach && len(m.selected) > 0 {
+		m.step = stepSettings
+		return m, nil
+	}
+
 	action, cmd := m.browser.Update(msg)
 
 	switch action {
@@ -435,7 +441,11 @@ func (m InitModel) View() tea.View {
 		b.WriteString(m.browser.ViewEntries(checkIndicator))
 
 		b.WriteString("\n")
-		help := "  [space] toggle  [→] open  [/] filter  [tab] done"
+		doneKey := "[tab] done"
+		if len(m.selected) > 0 {
+			doneKey = "[enter] done"
+		}
+		help := "  [space] toggle  [→] open  [/] filter  " + doneKey
 		if !m.browser.AtRoot() {
 			help += "  [←] up"
 		} else {

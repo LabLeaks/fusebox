@@ -11,4 +11,5 @@ const (
 	keyEsc     = "esc"
 	keyCtrlC   = "ctrl+c"
 	keyTeams   = "t"
+	keySync    = "s"
 )

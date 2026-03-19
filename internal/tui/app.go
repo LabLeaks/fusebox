@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/lableaks/fusebox/internal/config"
 	"github.com/lableaks/fusebox/internal/session"
 	"github.com/lableaks/fusebox/internal/ssh"
+	syncpkg "github.com/lableaks/fusebox/internal/sync"
 )
 
 type view int
@@ -22,6 +24,7 @@ const (
 	viewDashboard view = iota
 	viewCreate
 	viewTeamDetail
+	viewSync
 )
 
 // Messages
@@ -116,6 +119,8 @@ type Model struct {
 	teamSessions map[string]string // team name → session name
 	teamDetail   teamDetailModel
 	teamPanes    map[string]int // session name → pane count (for team detection)
+	syncView     syncModel
+	syncMgr      *syncpkg.Manager
 }
 
 func New(cfg config.Config) Model {
@@ -128,6 +133,7 @@ func NewWithRunner(cfg config.Config, runner ssh.Runner) Model {
 		spinner.WithSpinner(spinner.MiniDot),
 		spinner.WithStyle(spinnerStyle),
 	)
+	sm := syncpkg.NewManager(cfg.ResolveSandboxDataDir(), cfg.SSHTarget())
 	return Model{
 		cfg:       cfg,
 		ssh:       runner,
@@ -136,6 +142,7 @@ func NewWithRunner(cfg config.Config, runner ssh.Runner) Model {
 		preview:   viewport.New(),
 		loading:   true,
 		spinner:   s,
+		syncMgr:   sm,
 	}
 }
 
@@ -164,7 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case keyCtrlC:
-			if m.view == viewCreate {
+			if m.view == viewCreate || m.view == viewSync {
 				m.view = viewDashboard
 				m.loadingDirs = false
 				return m, nil
@@ -370,6 +377,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateCreate(msg)
 	case viewTeamDetail:
 		return m.updateTeamDetail(msg)
+	case viewSync:
+		return m.updateSync(msg)
 	}
 
 	return m, nil
@@ -389,6 +398,10 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case keyNew:
 			m.loadingDirs = true
 			return m, loadDirsCmd(m.manager)
+		case keySync:
+			m.syncView = newSyncModel(m.syncMgr)
+			m.view = viewSync
+			return m, loadSyncSessionsCmd(m.syncMgr)
 		case keyAttach:
 			if s, ok := m.dashboard.selectedSession(); ok {
 				cmd := m.ssh.AttachCmd(s.Name)
@@ -552,6 +565,97 @@ func (m Model) updateTeamDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m Model) updateSync(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle key events at this level for navigation
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		if m.syncView.adding {
+			// In add mode — handle browser navigation
+			switch kmsg.String() {
+			case keyEsc:
+				if m.syncView.browser.AtRoot() {
+					m.syncView.adding = false
+					return m, nil
+				}
+			}
+
+			action, browseCmd := m.syncView.browser.Update(msg)
+			switch action {
+			case dirBrowserAtRoot:
+				m.syncView.adding = false
+				return m, nil
+			case dirBrowserSelected, dirBrowserConfirm:
+				// Sync the selected folder
+				dir := m.syncView.browser.SelectedFullPath()
+				if dir != "" {
+					m.syncView.adding = false
+					return m, syncAddCmd(m.syncMgr, dir)
+				}
+				return m, nil
+			case dirBrowserDrillIn:
+				return m, scanLocalDirsCmd(m.syncView.browser.absPath)
+			case dirBrowserDrillUp:
+				if m.syncView.browser.scanning {
+					return m, scanLocalDirsCmd(m.syncView.browser.absPath)
+				}
+				return m, nil
+			}
+
+			// Pass local dir scan results to sync view
+			if ldm, ok := msg.(localDirsLoadedMsg); ok {
+				m.syncView, _ = m.syncView.Update(ldm)
+				return m, nil
+			}
+
+			return m, browseCmd
+		}
+
+		// List mode
+		switch kmsg.String() {
+		case keyEsc:
+			m.view = viewDashboard
+			return m, nil
+		case "a":
+			m.syncView.adding = true
+			home, _ := os.UserHomeDir()
+			m.syncView.browser = newDirBrowser(home)
+			return m, scanLocalDirsCmd(home)
+		case keyStop: // d = remove
+			if len(m.syncView.sessions) > 0 && m.syncView.confirm == "" {
+				s := m.syncView.sessions[m.syncView.cursor]
+				m.syncView.confirm = s.Local
+			}
+			return m, nil
+		case "y":
+			if m.syncView.confirm != "" {
+				path := m.syncView.confirm
+				m.syncView.confirm = ""
+				return m, syncRemoveCmd(m.syncMgr, path)
+			}
+			return m, nil
+		case "up":
+			if m.syncView.cursor > 0 {
+				m.syncView.cursor--
+			}
+			return m, nil
+		case "down":
+			if m.syncView.cursor < len(m.syncView.sessions)-1 {
+				m.syncView.cursor++
+			}
+			return m, nil
+		default:
+			if m.syncView.confirm != "" {
+				m.syncView.confirm = "" // any other key cancels confirm
+				return m, nil
+			}
+		}
+	}
+
+	// Pass other messages (loaded, added, removed) to sync model
+	var cmd tea.Cmd
+	m.syncView, cmd = m.syncView.Update(msg)
+	return m, cmd
+}
+
 // detectTeamSessions maps team names to session names.
 // A session is considered a team lead if it has >1 pane.
 func (m *Model) detectTeamSessions() {
@@ -609,6 +713,8 @@ func (m Model) View() tea.View {
 		b.WriteString(m.create.View())
 	case viewTeamDetail:
 		b.WriteString(m.teamDetail.View())
+	case viewSync:
+		b.WriteString(m.syncView.View())
 	}
 
 	if m.sandbox != "" || m.mutagen != "" {

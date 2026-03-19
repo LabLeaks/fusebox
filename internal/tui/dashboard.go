@@ -223,7 +223,7 @@ func (m dashboardModel) View() string {
 			}
 		}
 	}
-	help += "  [d] stop  [p] preview  [r] refresh  [q] quit"
+	help += "  [d] stop  [s] sync  [p] preview  [r] refresh  [q] quit"
 	b.WriteString(helpStyle.Render(help))
 
 	return b.String()

@@ -8,8 +8,13 @@ import (
 
 const claudeFlags = "--dangerously-skip-permissions --remote-control"
 
+type createOpts struct {
+	Teams  bool
+	Resume bool
+}
+
 // doCreate creates a new tmux session. Returns the expanded dir and any error.
-func doCreate(name, dir string, teams bool) (string, error) {
+func doCreate(name, dir string, opts createOpts) (string, error) {
 	// Expand ~ if present
 	if strings.HasPrefix(dir, "~") {
 		home, _ := os.UserHomeDir()
@@ -35,8 +40,11 @@ func doCreate(name, dir string, teams bool) (string, error) {
 
 	// Create tmux session
 	tmuxCmd := claudeBin + " " + claudeFlags
+	if opts.Resume {
+		tmuxCmd += " --continue"
+	}
 	args := []string{"new-session", "-d", "-s", name, "-c", dir, "-e", "WORK_SESSION=" + name}
-	if teams {
+	if opts.Teams {
 		args = append(args, "-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 	}
 	args = append(args, tmuxCmd)
@@ -52,7 +60,7 @@ func doCreate(name, dir string, teams bool) (string, error) {
 
 // CmdCreate creates a new tmux session running claude in the given directory.
 func CmdCreate(name, dir string) {
-	expandedDir, err := doCreate(name, dir, false)
+	expandedDir, err := doCreate(name, dir, createOpts{})
 	if err != nil {
 		ExitError(err.Error())
 	}
@@ -61,9 +69,27 @@ func CmdCreate(name, dir string) {
 
 // CmdCreateTeam creates a new tmux session with agent teams enabled.
 func CmdCreateTeam(name, dir string) {
-	expandedDir, err := doCreate(name, dir, true)
+	expandedDir, err := doCreate(name, dir, createOpts{Teams: true})
 	if err != nil {
 		ExitError(err.Error())
 	}
 	writeJSON(map[string]any{"ok": true, "name": name, "dir": expandedDir, "teams": true})
+}
+
+// CmdCreateResume creates a new tmux session that resumes the last conversation.
+func CmdCreateResume(name, dir string) {
+	expandedDir, err := doCreate(name, dir, createOpts{Resume: true})
+	if err != nil {
+		ExitError(err.Error())
+	}
+	writeJSON(map[string]any{"ok": true, "name": name, "dir": expandedDir, "resume": true})
+}
+
+// CmdCreateTeamResume creates a team session that resumes the last conversation.
+func CmdCreateTeamResume(name, dir string) {
+	expandedDir, err := doCreate(name, dir, createOpts{Teams: true, Resume: true})
+	if err != nil {
+		ExitError(err.Error())
+	}
+	writeJSON(map[string]any{"ok": true, "name": name, "dir": expandedDir, "teams": true, "resume": true})
 }

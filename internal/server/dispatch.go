@@ -2,7 +2,8 @@ package server
 
 // serverCommands lists commands that always dispatch as server (JSON) commands.
 var serverCommands = map[string]bool{
-	"list": true, "create": true, "create-team": true, "stop": true,
+	"list": true, "create": true, "create-team": true,
+	"create-resume": true, "create-team-resume": true, "stop": true,
 	"dirs": true, "subdirs": true,
 	"preview": true, "activity": true, "install-hooks": true,
 	"fix-mouse": true, "hook": true,
@@ -81,6 +82,16 @@ func Dispatch(cmd string, args []string) bool {
 			ExitError("usage: work create-team <name> <dir>")
 		}
 		CmdCreateTeam(args[0], args[1])
+	case "create-resume":
+		if len(args) < 2 {
+			ExitError("usage: work create-resume <name> <dir>")
+		}
+		CmdCreateResume(args[0], args[1])
+	case "create-team-resume":
+		if len(args) < 2 {
+			ExitError("usage: work create-team-resume <name> <dir>")
+		}
+		CmdCreateTeamResume(args[0], args[1])
 	}
 	return true
 }

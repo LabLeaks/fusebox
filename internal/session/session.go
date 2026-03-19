@@ -262,3 +262,19 @@ func (m *Manager) CreateTeam(name, dir string) error {
 	}
 	return nil
 }
+
+func (m *Manager) CreateResume(name, dir string) error {
+	cmd := fmt.Sprintf("%s create-resume %s %s", m.serverPath, name, dir)
+	if _, err := m.SSH.Run(cmd); err != nil {
+		return fmt.Errorf("resume session %q: %w", name, err)
+	}
+	return nil
+}
+
+func (m *Manager) CreateTeamResume(name, dir string) error {
+	cmd := fmt.Sprintf("%s create-team-resume %s %s", m.serverPath, name, dir)
+	if _, err := m.SSH.Run(cmd); err != nil {
+		return fmt.Errorf("resume team session %q: %w", name, err)
+	}
+	return nil
+}

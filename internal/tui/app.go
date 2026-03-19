@@ -445,10 +445,16 @@ func (m *Model) resizeLayout() {
 }
 
 func (m Model) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle teams toggle before browser
-	if kmsg, ok := msg.(tea.KeyPressMsg); ok && kmsg.String() == keyTeams && !m.create.browser.filtering {
-		m.create.teamsEnabled = !m.create.teamsEnabled
-		return m, nil
+	// Handle toggles before browser
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok && !m.create.browser.filtering {
+		switch kmsg.String() {
+		case keyTeams:
+			m.create.teamsEnabled = !m.create.teamsEnabled
+			return m, nil
+		case "c":
+			m.create.resume = !m.create.resume
+			return m, nil
+		}
 	}
 
 	// Let the browser handle the message first
@@ -463,13 +469,20 @@ func (m Model) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		name := m.create.sessionName()
 		if dir != "" && name != "" {
 			teams := m.create.teamsEnabled
+			resume := m.create.resume
 			m.view = viewDashboard
 			m.dashboard.addPendingSession(name, dir)
 			m.resizeLayout()
-			if teams {
+			switch {
+			case teams && resume:
+				return m, createTeamResumeCmd(m.manager, name, dir)
+			case teams:
 				return m, createTeamSessionCmd(m.manager, name, dir)
+			case resume:
+				return m, createResumeCmd(m.manager, name, dir)
+			default:
+				return m, createSessionCmd(m.manager, name, dir)
 			}
-			return m, createSessionCmd(m.manager, name, dir)
 		}
 		return m, nil
 	case dirBrowserDrillIn:
@@ -675,6 +688,20 @@ func activityTickCmd() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return activityTickMsg(t)
 	})
+}
+
+func createResumeCmd(mgr *session.Manager, name, dir string) tea.Cmd {
+	return func() tea.Msg {
+		err := mgr.CreateResume(name, dir)
+		return sessionCreatedMsg{err: err}
+	}
+}
+
+func createTeamResumeCmd(mgr *session.Manager, name, dir string) tea.Cmd {
+	return func() tea.Msg {
+		err := mgr.CreateTeamResume(name, dir)
+		return sessionCreatedMsg{err: err}
+	}
 }
 
 func createTeamSessionCmd(mgr *session.Manager, name, dir string) tea.Cmd {

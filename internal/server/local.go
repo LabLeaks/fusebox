@@ -171,7 +171,7 @@ func localNew(filter string) {
 			dir := filtered[0]
 			name := filepath.Base(dir)
 			fmt.Printf("Creating session %s%s%s → %s\n", cBold, name, cReset, dir)
-			if _, err := doCreate(name, dir, false); err != nil {
+			if _, err := doCreate(name, dir, createOpts{}); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
@@ -218,7 +218,7 @@ func localNew(filter string) {
 	}
 
 	fmt.Printf("Creating session %s%s%s...\n", cBold, name, cReset)
-	if _, err := doCreate(name, dir, false); err != nil {
+	if _, err := doCreate(name, dir, createOpts{}); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

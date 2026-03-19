@@ -72,10 +72,13 @@ work              # launches TUI when config has server.host
 | `enter` | Attach to selected session / drill into directory |
 | `d` | Stop session (with confirmation) |
 | `p` | Toggle preview pane — see last 30 lines of session output |
+| `t` | Open team detail (when selected session is a team lead) |
 | `esc` | Close preview pane / cancel |
 | `r` | Refresh session list |
 | `q` | Quit |
 | `ctrl+c` | Quit (or cancel current view) |
+
+When the hostname matches `server.host` in your config, the TUI runs locally — no SSH to itself. This means you can run `work` directly on the server and get the full dashboard.
 
 ### Local CLI (server / phone SSH)
 
@@ -94,11 +97,16 @@ work help             # show all commands
 ```bash
 work list             # JSON array of sessions
 work create <n> <dir> # create session
+work create-team <n> <dir>  # create session with agent teams enabled
 work stop <name>      # stop session
 work dirs             # browsable directories (from roots.conf)
 work subdirs <path>   # list subdirs of path with counts
 work preview <n> [lines]
 work activity         # tool activity for all sessions
+work teams            # list active teams with members and tasks
+work teams-toggle <on|off>  # enable/disable agent teams in settings.json
+work panes <session>  # list tmux panes for a session
+work pane-preview <session> <pane> [lines]  # capture a specific pane
 work install-hooks    # install Claude Code PostToolUse hook
 work fix-mouse        # enable mouse mode on all sessions
 work hook             # PostToolUse hook handler (reads stdin)
@@ -123,6 +131,36 @@ Activity updates every 5 seconds via a Claude Code [hook](https://docs.anthropic
 ### Preview pane
 
 Press `p` to open a live preview of the selected session's terminal output. It auto-refreshes every 2 seconds. Move your cursor to a different session and the preview follows. Press `p` or `esc` to close.
+
+### Agent teams
+
+Claude Code's experimental agent teams feature lets a lead session spawn teammate sessions that coordinate via shared task lists. Work-cli integrates with this — it doesn't orchestrate teams itself, but gives you visibility and control.
+
+**Enabling:** Toggle teams globally with `work teams-toggle on`, or per-session in the create flow with `[t]`.
+
+**Dashboard:** When a session is a team lead (detected by having multiple tmux panes), the Status column shows `Team: <name> X/Y` instead of tool activity.
+
+**Team detail:** Press `[t]` on a team lead session to see:
+- Teammate list with current activity
+- Task board with completion status
+- `[enter]` to attach to a specific teammate's pane
+- `[p]` to preview a teammate's output
+- `[esc]` to return to the dashboard
+
+| Key (dashboard) | Action |
+|-----|--------|
+| `t` | Open team detail (on team lead sessions) |
+
+| Key (team detail) | Action |
+|-----|--------|
+| `enter` | Attach to selected teammate's pane |
+| `p` | Preview selected teammate's output |
+| `up/down` | Navigate teammates |
+| `esc` | Back to dashboard |
+
+| Key (create) | Action |
+|-----|--------|
+| `t` | Toggle teams on/off for the new session |
 
 ### Attaching & detaching
 
@@ -189,7 +227,7 @@ Mac (client)                    spotless-1 (server)
                                   work activity
 ```
 
-One `work` binary runs everywhere. On the Mac (with config), it launches the TUI dashboard. On the server, it handles both interactive CLI commands and JSON server commands. The TUI calls server commands over SSH; the local CLI calls them directly.
+One `work` binary runs everywhere. On the Mac (with config), it launches the TUI dashboard over SSH. On the server, if the hostname matches `server.host`, the TUI runs locally with no SSH. Otherwise it falls back to the interactive CLI. The TUI works identically in both modes — only the transport changes.
 
 Tool activity flows through a separate path: Claude Code's PostToolUse hook fires `work hook`, which writes status to `/tmp/work-cli/<session>.json`. The dashboard polls `work activity` every 5 seconds to read those files.
 

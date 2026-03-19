@@ -117,6 +117,10 @@ func deployCmd(host, user, goarch, homeDir string, factory func(host, user strin
 			return deployedMsg{err: fmt.Errorf("failed to configure server: %w", err)}
 		}
 
+		// Ensure ~/.local/bin is in PATH for non-login shells (tmux)
+		ensurePathCmd := `grep -q 'HOME/.local/bin' ~/.bashrc 2>/dev/null || sed -i '1i # Added by fusebox — ensures ~/.local/bin is in PATH for tmux/non-login shells\nexport PATH="$HOME/.local/bin:$PATH"\n' ~/.bashrc`
+		runner.Run(ensurePathCmd) // best-effort, don't fail deploy
+
 		return deployedMsg{}
 	}
 }

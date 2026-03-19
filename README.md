@@ -166,6 +166,8 @@ Claude Code's experimental agent teams feature lets a lead session spawn teammat
 
 `enter` hands you off to the remote tmux session via SSH. You're now in Claude Code. To get back to the dashboard, detach from tmux with `ctrl+b d`.
 
+**Tmux tip:** Sessions run inside tmux, which captures mouse events for scrolling and pane selection. To click links, select text, or right-click normally, hold **Shift** while clicking.
+
 ## Configuration
 
 Config lives at `~/.config/work-cli/config.yaml`. Without it, `work` runs in local CLI mode.
@@ -182,6 +184,22 @@ browse_roots:
   - ~/projects
   - ~/work
 ```
+
+## Troubleshooting
+
+### `~/.local/bin` not in PATH
+
+Claude Code installs to `~/.local/bin`, but on Ubuntu this directory is only added to PATH in `~/.profile` (login shells). Tmux spawns non-login shells, so `~/.local/bin` is missing.
+
+`work init` fixes this automatically by adding an `export PATH` line to `~/.bashrc`. If you set up manually, add this to your server's `~/.bashrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Tmux mouse mode
+
+Fusebox enables mouse mode in tmux sessions for scrolling. To click links, select text, or use your terminal's native mouse behavior, hold **Shift** while clicking.
 
 ## Development
 

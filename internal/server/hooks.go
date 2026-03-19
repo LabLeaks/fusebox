@@ -29,28 +29,8 @@ func updateHooksSettings(settingsData []byte, hookCmd string) ([]byte, string, e
 
 	postToolUseRaw, _ := hooks["PostToolUse"].([]any)
 
-	// Check if hook already installed
-	for _, entry := range postToolUseRaw {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			continue
-		}
-		hooksList, ok := m["hooks"].([]any)
-		if !ok {
-			continue
-		}
-		for _, h := range hooksList {
-			hm, ok := h.(map[string]any)
-			if !ok {
-				continue
-			}
-			if cmd, ok := hm["command"].(string); ok && cmd == hookCmd {
-				return settingsData, "hook already installed", nil
-			}
-		}
-	}
-
-	// Remove old-format entries (without "hooks" key) and old fusebox-hook entries
+	// Remove old-format entries, stale hooks, and duplicates.
+	// We remove everything fusebox-related and re-add the current one below.
 	var filtered []any
 	for _, entry := range postToolUseRaw {
 		m, ok := entry.(map[string]any)
@@ -61,20 +41,22 @@ func updateHooksSettings(settingsData []byte, hookCmd string) ([]byte, string, e
 		if !ok {
 			continue // old format, skip
 		}
-		// Skip entries pointing to old fusebox-hook binary
-		isOld := false
+		isStale := false
 		for _, h := range hooksList {
 			hm, ok := h.(map[string]any)
 			if !ok {
 				continue
 			}
 			cmd, _ := hm["command"].(string)
-			if strings.HasSuffix(cmd, "/fusebox-hook") {
-				isOld = true
+			if strings.HasSuffix(cmd, "/fusebox-hook") ||
+				strings.Contains(cmd, "/work hook") ||
+				strings.Contains(cmd, "/work-hook") ||
+				strings.HasSuffix(cmd, "fusebox hook") {
+				isStale = true
 				break
 			}
 		}
-		if !isOld {
+		if !isStale {
 			filtered = append(filtered, entry)
 		}
 	}

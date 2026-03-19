@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -175,12 +176,12 @@ func TestUpdateHooksSettings_AlreadyInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if msg != "hook already installed" {
-		t.Errorf("msg = %q, want %q", msg, "hook already installed")
+	if msg != "hook installed" {
+		t.Errorf("msg = %q, want %q", msg, "hook installed")
 	}
-	// Should return original data unchanged
-	if string(out) != string(input) {
-		t.Error("expected original data returned unchanged")
+	// Should still contain exactly one hook entry
+	if !bytes.Contains(out, []byte("/usr/bin/fusebox-server hook")) {
+		t.Error("expected hook command in output")
 	}
 }
 

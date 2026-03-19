@@ -22,6 +22,31 @@ type createModel struct {
 	teamsEnabled bool
 }
 
+func newCreateWithCounts(dirs []string, homeDir string, counts map[string]int) createModel {
+	seen := make(map[string]bool)
+	var entries []dirBrowserEntry
+
+	for _, d := range dirs {
+		rel := strings.TrimPrefix(d, homeDir+"/")
+		parts := strings.SplitN(rel, "/", 2)
+		root := parts[0]
+		if !seen[root] {
+			seen[root] = true
+			count := 0
+			if counts != nil {
+				count = counts[root]
+			}
+			entries = append(entries, dirBrowserEntry{name: root, count: count})
+		}
+	}
+
+	b := newDirBrowser(homeDir)
+	b.SetEntries(entries)
+	b.SetRootEntries(entries)
+
+	return createModel{browser: b}
+}
+
 func newCreate(dirs []string, homeDir string) createModel {
 	// Convert flat dir list (from roots.conf) into root-level entries.
 	seen := make(map[string]bool)

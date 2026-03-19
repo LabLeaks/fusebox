@@ -47,6 +47,14 @@ func newTestApp(t *testing.T, mock *testutil.MockSSH) *teatest.TestModel {
 	if !mock.HasResponse(teamsCmd) {
 		mock.OnJSON(teamsCmd, `[]`)
 	}
+	// loadDirsCmd checks for synced folders first
+	if !mock.HasResponse("echo $HOME") {
+		mock.On("echo $HOME", []byte(testHome+"\n"), nil)
+	}
+	syncSubdirs := serverCmd("subdirs " + testHome + "/.fusebox/sync")
+	if !mock.HasResponse(syncSubdirs) {
+		mock.On(syncSubdirs, nil, fmt.Errorf("no sync dir"))
+	}
 	cfg := testConfig()
 	model := tui.NewWithRunner(cfg, mock)
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))

@@ -77,7 +77,7 @@ func main() {
 			os.Exit(1)
 		}
 		if initModel, ok := result.(tui.InitModel); ok && initModel.Launch() {
-			// Re-exec as bare "work" to launch dashboard
+			// Re-exec as bare "fusebox" to launch dashboard
 			exe, err := os.Executable()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error finding executable: %v\n", err)
@@ -94,7 +94,7 @@ func main() {
 		return
 	}
 
-	// Bare "work" — config determines mode
+	// Bare "fusebox" — config determines mode
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)

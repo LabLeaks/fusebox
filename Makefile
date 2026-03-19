@@ -41,7 +41,6 @@ deploy: install build-server
 	fi
 	ssh $(SERVER_USER)@$(SERVER) 'mkdir -p $(REMOTE_BIN) $$HOME/.config/fusebox'
 	scp fusebox-server $(SERVER_USER)@$(SERVER):$(REMOTE_BIN)/fusebox
-	ssh $(SERVER_USER)@$(SERVER) 'ln -sf $(REMOTE_BIN)/fusebox $(REMOTE_BIN)/fusebox-helper'
 	@# Generate roots.conf from config.yaml browse_roots (skip if no browse_roots)
 	@ROOTS=$$(grep -A 50 'browse_roots:' $(CONFIG) 2>/dev/null | tail -n +2 | grep '^ *-' | sed 's/^ *- *//' | sed "s|^~|/home/$(SERVER_USER)|"); \
 	if [ -n "$$ROOTS" ]; then \

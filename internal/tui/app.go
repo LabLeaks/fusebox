@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,6 +37,7 @@ type sessionsLoadedMsg struct {
 
 type dirsLoadedMsg struct {
 	dirs    []string
+	counts  map[string]int // subdir counts keyed by dir path
 	err     error
 	homeDir string // override homeDir for display (e.g. ~/.fusebox/sync)
 }
@@ -58,10 +60,6 @@ type mutagenStatusMsg struct {
 	err    error
 }
 
-type sandboxStatusMsg struct {
-	running bool
-	err     error
-}
 
 type previewLoadedMsg struct {
 	content string
@@ -106,7 +104,6 @@ type Model struct {
 	create       createModel
 	activity     map[string]session.ToolActivity
 	mutagen      string
-	sandbox      string // sandbox status line
 	width        int
 	height       int
 	loading      bool
@@ -148,17 +145,13 @@ func NewWithRunner(cfg config.Config, runner ssh.Runner) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{
+	return tea.Batch(
 		loadSessionsCmd(m.manager),
 		loadActivityCmd(m.manager),
 		loadTeamsCmd(m.manager),
 		loadMutagenCmd(),
 		m.spinner.Tick,
-	}
-	if m.cfg.Sandbox.Enabled {
-		cmds = append(cmds, loadSandboxStatusCmd(m.manager))
-	}
-	return tea.Batch(cmds...)
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -248,7 +241,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.homeDir != "" {
 			homeDir = msg.homeDir
 		}
-		m.create = newCreate(msg.dirs, homeDir)
+		if msg.counts != nil {
+			m.create = newCreateWithCounts(msg.dirs, homeDir, msg.counts)
+		} else {
+			m.create = newCreate(msg.dirs, homeDir)
+		}
 		m.view = viewCreate
 		return m, nil
 
@@ -294,14 +291,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case sandboxStatusMsg:
-		// Sandbox is invisible when working. Only surface errors.
-		if msg.err != nil {
-			m.sandbox = mutagenErr.Render("sandbox: error")
-		} else {
-			m.sandbox = ""
-		}
-		return m, nil
 
 	case previewLoadedMsg:
 		if !m.showPreview {
@@ -402,7 +391,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case keyNew:
 			m.loadingDirs = true
-			return m, loadSyncedDirsCmd(m.manager)
+			return m, loadDirsCmd(m.manager)
 		case keySync:
 			m.syncView = newSyncModel(m.syncMgr)
 			m.view = viewSync
@@ -718,17 +707,9 @@ func (m Model) View() tea.View {
 		b.WriteString(m.syncView.View())
 	}
 
-	if m.sandbox != "" || m.mutagen != "" {
+	if m.mutagen != "" {
 		b.WriteString("\n\n  ")
-		if m.sandbox != "" {
-			b.WriteString(m.sandbox)
-			if m.mutagen != "" {
-				b.WriteString("  ")
-			}
-		}
-		if m.mutagen != "" {
-			b.WriteString(m.mutagen)
-		}
+		b.WriteString(m.mutagen)
 	}
 
 	b.WriteString("\n")
@@ -766,38 +747,33 @@ func loadSessionsCmd(mgr *session.Manager) tea.Cmd {
 	}
 }
 
-// loadSyncedDirsCmd lists synced folder contents on the server.
-// Falls back to legacy browse roots if no synced folders exist.
-func loadSyncedDirsCmd(mgr *session.Manager) tea.Cmd {
+// loadDirsCmd lists synced folders on the server, falling back to browse roots.
+// Uses the subdirs command to get entry counts so drill-down works.
+func loadDirsCmd(mgr *session.Manager) tea.Cmd {
 	return func() tea.Msg {
 		// Check for synced folders at ~/.fusebox/sync/
-		syncOut, err := mgr.SSH.Run("ls -1d ~/.fusebox/sync/*/ 2>/dev/null | head -20")
-		if err == nil && strings.TrimSpace(string(syncOut)) != "" {
-			var dirs []string
-			for _, line := range strings.Split(strings.TrimSpace(string(syncOut)), "\n") {
-				line = strings.TrimSpace(line)
-				line = strings.TrimSuffix(line, "/")
-				if line != "" {
-					dirs = append(dirs, line)
+		homeOut, _ := mgr.SSH.Run("echo $HOME")
+		home := strings.TrimSpace(string(homeOut))
+		syncBase := home + "/.fusebox/sync"
+
+		// Use subdirs to get proper counts for drill-down
+		out, err := mgr.SSH.Run(mgr.ServerPath() + " subdirs " + syncBase)
+		if err == nil {
+			var entries []session.SubdirEntry
+			if json.Unmarshal(out, &entries) == nil && len(entries) > 0 {
+				var dirs []string
+				counts := make(map[string]int)
+				for _, e := range entries {
+					fullPath := syncBase + "/" + e.Path
+					dirs = append(dirs, fullPath)
+					counts[e.Path] = e.Count
 				}
-			}
-			if len(dirs) > 0 {
-				// Get the sync base dir for display stripping
-				syncBase, _ := mgr.SSH.Run("echo ~/.fusebox/sync")
-				base := strings.TrimSpace(string(syncBase))
-				return dirsLoadedMsg{dirs: dirs, homeDir: base}
+				return dirsLoadedMsg{dirs: dirs, homeDir: syncBase, counts: counts}
 			}
 		}
 		// Fall back to legacy browse roots
-		dirs, err := mgr.ListDirs()
-		return dirsLoadedMsg{dirs: dirs, err: err}
-	}
-}
-
-func loadDirsCmd(mgr *session.Manager) tea.Cmd {
-	return func() tea.Msg {
-		dirs, err := mgr.ListDirs()
-		return dirsLoadedMsg{dirs: dirs, err: err}
+		dirs, lErr := mgr.ListDirs()
+		return dirsLoadedMsg{dirs: dirs, err: lErr}
 	}
 }
 
@@ -890,18 +866,6 @@ func loadPanePreviewCmd(mgr *session.Manager, sessionName string, pane int) tea.
 	return func() tea.Msg {
 		content, err := mgr.PanePreview(sessionName, pane, 30)
 		return panePreviewLoadedMsg{content: content, pane: pane, err: err}
-	}
-}
-
-func loadSandboxStatusCmd(mgr *session.Manager) tea.Cmd {
-	return func() tea.Msg {
-		out, err := mgr.SSH.Run(mgr.ServerPath() + " sandbox-status")
-		if err != nil {
-			return sandboxStatusMsg{err: err}
-		}
-		// Parse the JSON response for "running" field
-		running := strings.Contains(string(out), `"running":true`)
-		return sandboxStatusMsg{running: running}
 	}
 }
 

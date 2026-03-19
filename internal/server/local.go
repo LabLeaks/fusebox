@@ -94,15 +94,15 @@ func localLs() {
 	}
 
 	home, _ := os.UserHomeDir()
-	homeWork := home + "/work/"
+	homePrefix := home + "/"
 	now := time.Now().Unix()
 	activity := readActivityDir("/tmp/fusebox", 60)
 
 	fmt.Println()
 	for i, s := range sessions {
 		shortDir := s.Dir
-		if strings.HasPrefix(shortDir, homeWork) {
-			shortDir = strings.TrimPrefix(shortDir, homeWork)
+		if strings.HasPrefix(shortDir, homePrefix) {
+			shortDir = strings.TrimPrefix(shortDir, homePrefix)
 		}
 		up := formatUptime(now - s.Created)
 		status := sessionStatus(s.Name, activity)
@@ -153,7 +153,7 @@ func localNew(filter string) {
 	}
 
 	home, _ := os.UserHomeDir()
-	homeWork := home + "/work/"
+	homePrefix := home + "/"
 
 	if filter != "" {
 		var filtered []string
@@ -189,8 +189,8 @@ func localNew(filter string) {
 	fmt.Println()
 	for i, dir := range dirs {
 		short := dir
-		if strings.HasPrefix(short, homeWork) {
-			short = strings.TrimPrefix(short, homeWork)
+		if strings.HasPrefix(short, homePrefix) {
+			short = strings.TrimPrefix(short, homePrefix)
 		}
 		fmt.Printf("  %s%2d)%s %s\n", cBold, i+1, cReset, short)
 	}

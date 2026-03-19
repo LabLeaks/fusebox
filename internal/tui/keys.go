@@ -5,7 +5,6 @@ const (
 	keyNew     = "n"
 	keyAttach  = "enter"
 	keyStop    = "d"
-	keyRefresh = "r"
 	keyPreview = "p"
 	keyQuit    = "q"
 	keyEsc     = "esc"

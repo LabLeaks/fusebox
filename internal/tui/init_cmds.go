@@ -119,10 +119,10 @@ func deployCmd(host, user, goarch, homeDir string, factory func(host, user strin
 			return deployedMsg{err: fmt.Errorf("failed to upload binary: %w", err)}
 		}
 
-		// Symlink fusebox-helper and run install-hooks + fix-mouse
+		// Run install-hooks + fix-mouse
 		commands := fmt.Sprintf(
-			"ln -sf %s/fusebox %s/fusebox-helper && %s/fusebox install-hooks && %s/fusebox fix-mouse",
-			binDir, binDir, binDir, binDir,
+			"%s/fusebox install-hooks && %s/fusebox fix-mouse",
+			binDir, binDir,
 		)
 		if _, err := runner.Run(commands); err != nil {
 			return deployedMsg{err: fmt.Errorf("failed to configure server: %w", err)}

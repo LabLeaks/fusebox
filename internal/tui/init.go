@@ -206,6 +206,7 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sandboxDetectedMsg:
 		m.sandboxOK = msg.supported
 		m.sandboxWhy = msg.reason
+		m.sandboxOn = msg.supported // default to on when available
 		return m, nil
 
 	case dirsFoundMsg:

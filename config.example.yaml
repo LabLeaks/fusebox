@@ -1,0 +1,18 @@
+# work-cli configuration
+# Copy to ~/.config/work-cli/config.yaml and edit.
+
+server:
+  host: your-server        # SSH hostname (required)
+  user: your-username       # SSH username (required)
+  # home_dir: /home/user   # Optional — auto-detected as /home/<user>
+
+claude:
+  flags: "--dangerously-skip-permissions --remote-control"
+
+# helper_path: ~/bin/work  # Optional — default ~/bin/work
+
+# Directories to browse when creating sessions.
+# Each root is scanned for immediate subdirectories.
+browse_roots:
+  - ~/projects
+  - ~/work

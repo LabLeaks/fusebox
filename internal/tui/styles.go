@@ -37,7 +37,7 @@ var (
 		Foreground(lipgloss.Color("#FF0000"))
 
 	helpStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#626262"))
+		Foreground(lipgloss.Color("#999999"))
 
 	filterPromptStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#7D56F4")).

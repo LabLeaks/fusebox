@@ -11,23 +11,23 @@ case $ARCH in
     aarch64|arm64) ARCH=arm64 ;;
 esac
 
-ASSET="work-${OS}-${ARCH}"
+ASSET="fusebox-${OS}-${ARCH}"
 
 # Use gh CLI for private repos, fall back to curl for public
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     echo "Downloading ${ASSET} via gh..."
     gh release download --repo "$REPO" --pattern "$ASSET" --dir /tmp --clobber
-    mv "/tmp/${ASSET}" /tmp/work-install
+    mv "/tmp/${ASSET}" /tmp/fusebox-install
 else
     URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
     echo "Downloading ${ASSET}..."
-    curl -fsSL "$URL" -o /tmp/work-install
+    curl -fsSL "$URL" -o /tmp/fusebox-install
 fi
 
-chmod +x /tmp/work-install
+chmod +x /tmp/fusebox-install
 mkdir -p "$INSTALL_DIR"
-mv /tmp/work-install "$INSTALL_DIR/work"
-echo "Installed to $INSTALL_DIR/work"
+mv /tmp/fusebox-install "$INSTALL_DIR/fusebox"
+echo "Installed to $INSTALL_DIR/fusebox"
 echo ""
 echo "Make sure $INSTALL_DIR is in your PATH, then run:"
-echo "  work init user@your-server"
+echo "  fusebox init user@your-server"

@@ -25,7 +25,7 @@ const (
 	viewDashboard view = iota
 	viewCreate
 	viewTeamDetail
-	viewSync
+	viewSettings
 )
 
 // Messages
@@ -117,7 +117,7 @@ type Model struct {
 	teamSessions map[string]string // team name → session name
 	teamDetail   teamDetailModel
 	teamPanes    map[string]int // session name → pane count (for team detection)
-	syncView     syncModel
+	settings     settingsModel
 	syncMgr      *syncpkg.Manager
 }
 
@@ -165,7 +165,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case keyCtrlC:
-			if m.view == viewCreate || m.view == viewSync {
+			if m.view == viewCreate || m.view == viewSettings {
 				m.view = viewDashboard
 				m.loadingDirs = false
 				return m, nil
@@ -371,8 +371,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateCreate(msg)
 	case viewTeamDetail:
 		return m.updateTeamDetail(msg)
-	case viewSync:
-		return m.updateSync(msg)
+	case viewSettings:
+		return m.updateSettings(msg)
 	}
 
 	return m, nil
@@ -393,8 +393,8 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingDirs = true
 			return m, loadDirsCmd(m.manager)
 		case keySync:
-			m.syncView = newSyncModel(m.syncMgr)
-			m.view = viewSync
+			m.settings = newSettingsModel(m.syncMgr, m.cfg.Claude.Teams)
+			m.view = viewSettings
 			return m, loadSyncSessionsCmd(m.syncMgr)
 		case keyAttach:
 			if s, ok := m.dashboard.selectedSession(); ok {
@@ -556,85 +556,102 @@ func (m Model) updateTeamDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) updateSync(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle key events at this level for navigation
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
-		if m.syncView.adding {
+		if m.settings.adding {
 			// In add mode — intercept enter to sync (not drill)
 			switch kmsg.String() {
 			case keyAttach: // enter = sync this folder
-				dir := m.syncView.browser.SelectedFullPath()
+				dir := m.settings.browser.SelectedFullPath()
 				if dir != "" {
-					m.syncView.adding = false
+					m.settings.adding = false
 					return m, syncAddCmd(m.syncMgr, dir)
 				}
 				return m, nil
 			case keyEsc:
-				if m.syncView.browser.AtRoot() {
-					m.syncView.adding = false
+				if m.settings.browser.AtRoot() {
+					m.settings.adding = false
 					return m, nil
 				}
 			}
 
-			action, browseCmd := m.syncView.browser.Update(msg)
+			action, browseCmd := m.settings.browser.Update(msg)
 			switch action {
 			case dirBrowserAtRoot:
-				m.syncView.adding = false
+				m.settings.adding = false
 				return m, nil
 			case dirBrowserDrillIn:
-				return m, scanLocalDirsCmd(m.syncView.browser.absPath)
+				return m, scanLocalDirsCmd(m.settings.browser.absPath)
 			case dirBrowserDrillUp:
-				if m.syncView.browser.scanning {
-					return m, scanLocalDirsCmd(m.syncView.browser.absPath)
+				if m.settings.browser.scanning {
+					return m, scanLocalDirsCmd(m.settings.browser.absPath)
 				}
 				return m, nil
 			}
 
 			// Pass local dir scan results to sync view
 			if ldm, ok := msg.(localDirsLoadedMsg); ok {
-				m.syncView, _ = m.syncView.Update(ldm)
+				m.settings, _ = m.settings.Update(ldm)
 				return m, nil
 			}
 
 			return m, browseCmd
 		}
 
-		// List mode
+		// Global settings keys
 		switch kmsg.String() {
 		case keyEsc:
 			m.view = viewDashboard
 			return m, nil
-		case "a":
-			m.syncView.adding = true
-			home, _ := os.UserHomeDir()
-			m.syncView.browser = newDirBrowser(home)
-			return m, scanLocalDirsCmd(home)
-		case keyStop: // d = remove
-			if len(m.syncView.sessions) > 0 && m.syncView.confirm == "" {
-				s := m.syncView.sessions[m.syncView.cursor]
-				m.syncView.confirm = s.Local
-			}
+		case "tab":
+			m.settings.section = (m.settings.section + 1) % sectionCount
 			return m, nil
-		case "y":
-			if m.syncView.confirm != "" {
-				path := m.syncView.confirm
-				m.syncView.confirm = ""
-				return m, syncRemoveCmd(m.syncMgr, path)
+		}
+
+		// Section-specific keys
+		switch m.settings.section {
+		case sectionSyncedFolders:
+			switch kmsg.String() {
+			case "a":
+				m.settings.adding = true
+				home, _ := os.UserHomeDir()
+				m.settings.browser = newDirBrowser(home)
+				return m, scanLocalDirsCmd(home)
+			case keyStop: // d = remove
+				if len(m.settings.sessions) > 0 && m.settings.syncConfirm == "" {
+					s := m.settings.sessions[m.settings.syncCursor]
+					m.settings.syncConfirm = s.Local
+				}
+				return m, nil
+			case "y":
+				if m.settings.syncConfirm != "" {
+					path := m.settings.syncConfirm
+					m.settings.syncConfirm = ""
+					return m, syncRemoveCmd(m.syncMgr, path)
+				}
+				return m, nil
+			case "up":
+				if m.settings.syncCursor > 0 {
+					m.settings.syncCursor--
+				}
+				return m, nil
+			case "down":
+				if m.settings.syncCursor < len(m.settings.sessions)-1 {
+					m.settings.syncCursor++
+				}
+				return m, nil
+			default:
+				if m.settings.syncConfirm != "" {
+					m.settings.syncConfirm = ""
+					return m, nil
+				}
 			}
-			return m, nil
-		case "up":
-			if m.syncView.cursor > 0 {
-				m.syncView.cursor--
-			}
-			return m, nil
-		case "down":
-			if m.syncView.cursor < len(m.syncView.sessions)-1 {
-				m.syncView.cursor++
-			}
-			return m, nil
-		default:
-			if m.syncView.confirm != "" {
-				m.syncView.confirm = "" // any other key cancels confirm
+		case sectionTeams:
+			switch kmsg.String() {
+			case "space":
+				m.settings.teamsEnabled = !m.settings.teamsEnabled
+				m.cfg.Claude.Teams = m.settings.teamsEnabled
 				return m, nil
 			}
 		}
@@ -642,7 +659,7 @@ func (m Model) updateSync(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Pass other messages (loaded, added, removed) to sync model
 	var cmd tea.Cmd
-	m.syncView, cmd = m.syncView.Update(msg)
+	m.settings, cmd = m.settings.Update(msg)
 	return m, cmd
 }
 
@@ -703,8 +720,8 @@ func (m Model) View() tea.View {
 		b.WriteString(m.create.View())
 	case viewTeamDetail:
 		b.WriteString(m.teamDetail.View())
-	case viewSync:
-		b.WriteString(m.syncView.View())
+	case viewSettings:
+		b.WriteString(m.settings.View())
 	}
 
 	if m.mutagen != "" {

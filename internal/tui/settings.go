@@ -11,7 +11,7 @@ import (
 	syncpkg "github.com/lableaks/fusebox/internal/sync"
 )
 
-// Messages for sync view.
+// Messages for settings view.
 
 type syncSessionsLoadedMsg struct {
 	sessions []syncpkg.SyncSession
@@ -33,57 +33,70 @@ type localDirsLoadedMsg struct {
 	err     error
 }
 
-// syncModel manages the sync view.
-type syncModel struct {
-	sessions []syncpkg.SyncSession
-	cursor   int
-	confirm  string // non-empty = confirming remove
-	err      error
+// settingsSection tracks which section is active.
+type settingsSection int
 
-	// add mode
-	adding  bool
-	browser dirBrowser
+const (
+	sectionSyncedFolders settingsSection = iota
+	sectionTeams
+	sectionCount // sentinel for wrapping
+)
 
-	mgr *syncpkg.Manager
+// settingsModel manages the settings view.
+type settingsModel struct {
+	section settingsSection
+
+	// Synced folders
+	sessions    []syncpkg.SyncSession
+	syncCursor  int
+	syncConfirm string // non-empty = confirming remove
+	syncErr     error
+	adding      bool
+	browser     dirBrowser
+	mgr         *syncpkg.Manager
+
+	// Teams
+	teamsEnabled bool
 }
 
-func newSyncModel(mgr *syncpkg.Manager) syncModel {
+func newSettingsModel(mgr *syncpkg.Manager, teamsEnabled bool) settingsModel {
 	home, _ := os.UserHomeDir()
-	return syncModel{
-		mgr:     mgr,
-		browser: newDirBrowser(home),
+	return settingsModel{
+		mgr:          mgr,
+		browser:      newDirBrowser(home),
+		teamsEnabled: teamsEnabled,
 	}
 }
 
-func (m syncModel) Update(msg tea.Msg) (syncModel, tea.Cmd) {
+func (m settingsModel) Update(msg tea.Msg) (settingsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case syncSessionsLoadedMsg:
 		if msg.err != nil {
-			m.err = msg.err
+			m.syncErr = msg.err
 		} else {
 			m.sessions = msg.sessions
-			m.err = nil
+			m.syncErr = nil
 		}
-		if m.cursor >= len(m.sessions) {
-			m.cursor = max(0, len(m.sessions)-1)
+		if m.syncCursor >= len(m.sessions) {
+			m.syncCursor = max(0, len(m.sessions)-1)
 		}
 		return m, nil
 
 	case syncAddedMsg:
 		m.adding = false
 		if msg.err != nil {
-			m.err = msg.err
+			m.syncErr = msg.err
 		} else {
-			m.err = nil
+			m.syncErr = nil
 		}
 		return m, loadSyncSessionsCmd(m.mgr)
 
 	case syncRemovedMsg:
-		m.confirm = ""
+		m.syncConfirm = ""
 		if msg.err != nil {
-			m.err = msg.err
+			m.syncErr = msg.err
 		} else {
-			m.err = nil
+			m.syncErr = nil
 		}
 		return m, loadSyncSessionsCmd(m.mgr)
 
@@ -99,59 +112,87 @@ func (m syncModel) Update(msg tea.Msg) (syncModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m syncModel) View() string {
+func (m settingsModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(headerStyle.Render("  Synced Folders  "))
+	b.WriteString(headerStyle.Render("  Settings  "))
 	b.WriteString("\n\n")
 
 	if m.adding {
-		return m.viewAdd(&b)
+		return m.viewSyncAdd(&b)
 	}
 
-	b.WriteString("  Folders synced between your machine and the server.\n")
-	b.WriteString("  Changes sync both ways — your IDE and Claude see the same files.\n\n")
+	// Section: Synced Folders
+	m.renderSectionHeader(&b, sectionSyncedFolders, "Synced Folders")
+	if m.section == sectionSyncedFolders {
+		b.WriteString("  Files sync both ways — your IDE and Claude see the same code.\n\n")
 
-	if m.err != nil {
-		b.WriteString(errorStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
-		b.WriteString("\n\n")
-	}
-
-	if len(m.sessions) == 0 {
-		b.WriteString("  No folders synced yet. Press [a] to add one.\n\n")
-	} else {
-		for i, s := range m.sessions {
-			cursor := "  "
-			if i == m.cursor {
-				cursor = "▸ "
-			}
-
-			local := s.Local
-			if home, err := os.UserHomeDir(); err == nil {
-				local = strings.Replace(local, home, "~", 1)
-			}
-
-			status := s.Status
-			if status == "" {
-				status = "unknown"
-			}
-
-			b.WriteString(fmt.Sprintf("  %s%-30s  %s\n", cursor, local, helpStyle.Render(status)))
+		if m.syncErr != nil {
+			b.WriteString(errorStyle.Render(fmt.Sprintf("  Error: %v", m.syncErr)))
+			b.WriteString("\n\n")
 		}
-		b.WriteString("\n")
-	}
 
-	if m.confirm != "" {
-		b.WriteString(errorStyle.Render(fmt.Sprintf("  Remove sync %q? [y/n]", m.confirm)))
-		b.WriteString("\n\n")
-	}
+		if len(m.sessions) == 0 {
+			b.WriteString("  No folders synced yet. Press [a] to add one.\n\n")
+		} else {
+			for i, s := range m.sessions {
+				cursor := "  "
+				if i == m.syncCursor {
+					cursor = "▸ "
+				}
 
-	b.WriteString("  [a] add folder  [d] remove  [esc] back\n")
+				local := s.Local
+				if home, err := os.UserHomeDir(); err == nil {
+					local = strings.Replace(local, home, "~", 1)
+				}
+
+				status := s.Status
+				if status == "" {
+					status = "unknown"
+				}
+
+				b.WriteString(fmt.Sprintf("  %s%-30s  %s\n", cursor, local, helpStyle.Render(status)))
+			}
+			b.WriteString("\n")
+		}
+
+		if m.syncConfirm != "" {
+			b.WriteString(errorStyle.Render(fmt.Sprintf("  Remove sync %q? [y/n]", m.syncConfirm)))
+			b.WriteString("\n\n")
+		}
+
+		b.WriteString("  [a] add  [d] remove\n")
+	}
+	b.WriteString("\n")
+
+	// Section: Teams
+	m.renderSectionHeader(&b, sectionTeams, "Agent Teams")
+	if m.section == sectionTeams {
+		ind := checkOff.String()
+		if m.teamsEnabled {
+			ind = checkOn.String()
+		}
+		b.WriteString(fmt.Sprintf("  %s  Enable agent teams for new sessions  [space]\n", ind))
+		b.WriteString("  " + helpStyle.Render("Teams let Claude spawn parallel teammates for complex tasks.") + "\n")
+	}
+	b.WriteString("\n")
+
+	// Footer
+	b.WriteString("  [tab] next section  [esc] back\n")
 
 	return b.String()
 }
 
-func (m syncModel) viewAdd(b *strings.Builder) string {
+func (m settingsModel) renderSectionHeader(b *strings.Builder, section settingsSection, label string) {
+	if m.section == section {
+		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %s", label)))
+	} else {
+		b.WriteString(helpStyle.Render(fmt.Sprintf("    %s", label)))
+	}
+	b.WriteString("\n")
+}
+
+func (m settingsModel) viewSyncAdd(b *strings.Builder) string {
 	b.WriteString("  Choose a local folder to sync to the server.\n")
 	b.WriteString("  Use [→] to browse inside, [enter] to start syncing.\n\n")
 
@@ -163,7 +204,6 @@ func (m syncModel) viewAdd(b *strings.Builder) string {
 	b.WriteString(m.browser.ViewFilter())
 	b.WriteString("\n")
 
-	// Show "synced" indicator for already-synced folders
 	syncedPaths := make(map[string]bool)
 	for _, s := range m.sessions {
 		syncedPaths[filepath.Base(s.Local)] = true
@@ -212,7 +252,6 @@ func syncRemoveCmd(mgr *syncpkg.Manager, path string) tea.Cmd {
 	}
 }
 
-// scanLocalDirsCmd scans a local directory for non-hidden subdirectories.
 func scanLocalDirsCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		entries, err := os.ReadDir(path)
@@ -225,7 +264,6 @@ func scanLocalDirsCmd(path string) tea.Cmd {
 			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 				continue
 			}
-			// Count subdirectories
 			count := 0
 			subPath := filepath.Join(path, e.Name())
 			if subs, err := os.ReadDir(subPath); err == nil {

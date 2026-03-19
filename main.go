@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,6 +19,9 @@ import (
 	syncpkg "github.com/lableaks/fusebox/internal/sync"
 	"github.com/lableaks/fusebox/internal/tui"
 )
+
+// Version is set at build time via -ldflags.
+var Version = "dev"
 
 // isLocalHost checks if the configured host matches the current machine.
 func isLocalHost(host string) bool {
@@ -35,6 +43,18 @@ func main() {
 	// Fusebox sync subcommand
 	if len(os.Args) > 1 && os.Args[1] == "sync" {
 		handleSync(os.Args[2:])
+		return
+	}
+
+	// Version
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println("fusebox " + Version)
+		return
+	}
+
+	// Self-update
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		handleUpdate()
 		return
 	}
 
@@ -194,4 +214,97 @@ Commands:
   ls            List active sync sessions
   pause         Pause all sync sessions
   resume        Resume all sync sessions`)
+}
+
+func handleUpdate() {
+	fmt.Println("Checking for updates...")
+
+	// Get latest release tag
+	resp, err := http.Get("https://api.github.com/repos/LabLeaks/fusebox/releases/latest")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		fmt.Fprintf(os.Stderr, "Error: GitHub API returned %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing response: %v\n", err)
+		os.Exit(1)
+	}
+
+	latest := strings.TrimPrefix(release.TagName, "v")
+	current := strings.TrimPrefix(Version, "v")
+
+	if current != "dev" && latest == current {
+		fmt.Printf("Already up to date (%s).\n", Version)
+		return
+	}
+
+	if current != "dev" {
+		fmt.Printf("Current: %s → Latest: %s\n", Version, release.TagName)
+	}
+
+	// Download
+	arch := runtime.GOARCH
+	goos := runtime.GOOS
+	asset := fmt.Sprintf("fusebox-%s-%s", goos, arch)
+	url := fmt.Sprintf("https://github.com/LabLeaks/fusebox/releases/download/%s/%s", release.TagName, asset)
+
+	fmt.Printf("Downloading %s...\n", asset)
+	dlResp, err := http.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != 200 {
+		fmt.Fprintf(os.Stderr, "Error: download returned %d\n", dlResp.StatusCode)
+		os.Exit(1)
+	}
+
+	// Write to temp file next to current binary
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	exe, _ = filepath.EvalSymlinks(exe)
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(exe), "fusebox-update-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, err := io.Copy(tmpFile, dlResp.Body); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	tmpFile.Close()
+
+	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
+		os.Remove(tmpFile.Name())
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Atomic replace
+	if err := os.Rename(tmpFile.Name(), exe); err != nil {
+		os.Remove(tmpFile.Name())
+		fmt.Fprintf(os.Stderr, "Error replacing binary: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Updated to %s.\n", release.TagName)
 }

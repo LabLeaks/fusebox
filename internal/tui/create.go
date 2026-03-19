@@ -20,7 +20,6 @@ type subdirsLoadedMsg struct {
 type createModel struct {
 	browser      dirBrowser
 	teamsEnabled bool
-	resume       bool
 }
 
 func newCreate(dirs []string, homeDir string) createModel {
@@ -94,26 +93,22 @@ func (m createModel) View() string {
 	b.WriteString(m.browser.ViewEntries(noIndicator))
 
 	// Options
-	resumeLabel := "OFF"
-	if m.resume {
-		resumeLabel = "ON"
-	}
 	teamsLabel := "OFF"
 	if m.teamsEnabled {
 		teamsLabel = "ON"
 	}
-	b.WriteString(fmt.Sprintf("\n  Resume: %s   Teams: %s\n", resumeLabel, teamsLabel))
+	b.WriteString(fmt.Sprintf("\n  Teams: %s\n", teamsLabel))
 
 	b.WriteString("\n")
 	var help string
 	if e, ok := m.browser.SelectedEntry(); ok {
 		if e.count > 0 {
-			help = fmt.Sprintf("  [→] open  [space] create \"%s\"", e.name)
+			help = fmt.Sprintf("  [→] open  [space] new  [r] resume \"%s\"", e.name)
 		} else {
-			help = fmt.Sprintf("  [space] create \"%s\"", e.name)
+			help = fmt.Sprintf("  [space] new  [r] resume \"%s\"", e.name)
 		}
 	}
-	help += "  [c] resume  [t] teams  [/] filter"
+	help += "  [t] teams  [/] filter"
 	if !m.browser.AtRoot() {
 		help += "  [←] up"
 	} else {

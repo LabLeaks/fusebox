@@ -25,6 +25,7 @@ const (
 	dirBrowserDrillUp                          // went up a level — parent should load subdirs (or restore root)
 	dirBrowserAtRoot                           // esc pressed at root — parent decides what to do
 	dirBrowserSelected                         // space pressed — parent handles the selection
+	dirBrowserResume                           // r pressed — parent handles resume
 	dirBrowserConfirm                          // tab pressed — parent handles confirmation
 )
 
@@ -214,6 +215,8 @@ func (b *dirBrowser) Update(msg tea.Msg) (dirBrowserAction, tea.Cmd) {
 		return dirBrowserAtRoot, nil
 	case "space":
 		return dirBrowserSelected, nil
+	case "r":
+		return dirBrowserResume, nil
 	case "tab":
 		return dirBrowserConfirm, nil
 	case "/": // activate filter

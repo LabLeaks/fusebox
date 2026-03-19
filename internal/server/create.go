@@ -41,7 +41,7 @@ func doCreate(name, dir string, opts createOpts) (string, error) {
 	// Create tmux session
 	tmuxCmd := claudeBin + " " + claudeFlags
 	if opts.Resume {
-		tmuxCmd += " --continue"
+		tmuxCmd += " --resume"
 	}
 	args := []string{"new-session", "-d", "-s", name, "-c", dir, "-e", "WORK_SESSION=" + name}
 	if opts.Teams {

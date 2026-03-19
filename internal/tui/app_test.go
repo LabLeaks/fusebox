@@ -336,19 +336,6 @@ func TestDashboard_ListExitErrorShowsError(t *testing.T) {
 	waitFor(t, tm, "Error")
 }
 
-func TestDashboard_RefreshReloads(t *testing.T) {
-	mock := testutil.NewMockSSH()
-	mock.OnJSON(serverCmd("list"), `[]`)
-	tm := newTestApp(t, mock)
-
-	waitFor(t, tm, "No active sessions")
-
-	// Update mock to return sessions, then refresh
-	mock.OnJSON(serverCmd("list"), sessionsJSON)
-	tm.Type("r")
-	waitFor(t, tm, "project-a")
-}
-
 // --- Preview pane ---
 
 func TestPreview_ToggleOnOff(t *testing.T) {

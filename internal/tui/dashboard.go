@@ -213,7 +213,7 @@ func (m dashboardModel) View() string {
 		b.WriteString("\n\n")
 	}
 
-	help := "  [n] new  [enter] attach"
+	help := "  [n] new session  [enter] attach"
 	// Show [t] team if selected session is a team lead
 	if s, ok := m.selectedSession(); ok {
 		for _, sName := range m.teamSessions {
@@ -223,7 +223,7 @@ func (m dashboardModel) View() string {
 			}
 		}
 	}
-	help += "  [d] stop  [s] sync  [p] preview  [r] refresh  [q] quit"
+	help += "  [d] stop  [s] folders  [p] preview  [q] quit"
 	b.WriteString(helpStyle.Render(help))
 
 	return b.String()

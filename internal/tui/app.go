@@ -35,8 +35,9 @@ type sessionsLoadedMsg struct {
 }
 
 type dirsLoadedMsg struct {
-	dirs []string
-	err  error
+	dirs    []string
+	err     error
+	homeDir string // override homeDir for display (e.g. ~/.fusebox/sync)
 }
 
 type sessionCreatedMsg struct {
@@ -243,7 +244,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewDashboard
 			return m, nil
 		}
-		m.create = newCreate(msg.dirs, m.cfg.ResolveHomeDir())
+		homeDir := m.cfg.ResolveHomeDir()
+		if msg.homeDir != "" {
+			homeDir = msg.homeDir
+		}
+		m.create = newCreate(msg.dirs, homeDir)
 		m.view = viewCreate
 		return m, nil
 
@@ -410,9 +415,6 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 			return m, nil
-		case keyRefresh:
-			m.loading = true
-			return m, loadSessionsCmd(m.manager)
 		case keyTeams:
 			if s, ok := m.dashboard.selectedSession(); ok {
 				if teamName, isLead := m.sessionIsTeamLead(s.Name); isLead {
@@ -569,8 +571,15 @@ func (m Model) updateSync(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle key events at this level for navigation
 	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
 		if m.syncView.adding {
-			// In add mode — handle browser navigation
+			// In add mode — intercept enter to sync (not drill)
 			switch kmsg.String() {
+			case keyAttach: // enter = sync this folder
+				dir := m.syncView.browser.SelectedFullPath()
+				if dir != "" {
+					m.syncView.adding = false
+					return m, syncAddCmd(m.syncMgr, dir)
+				}
+				return m, nil
 			case keyEsc:
 				if m.syncView.browser.AtRoot() {
 					m.syncView.adding = false
@@ -582,14 +591,6 @@ func (m Model) updateSync(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch action {
 			case dirBrowserAtRoot:
 				m.syncView.adding = false
-				return m, nil
-			case dirBrowserSelected, dirBrowserConfirm:
-				// Sync the selected folder
-				dir := m.syncView.browser.SelectedFullPath()
-				if dir != "" {
-					m.syncView.adding = false
-					return m, syncAddCmd(m.syncMgr, dir)
-				}
 				return m, nil
 			case dirBrowserDrillIn:
 				return m, scanLocalDirsCmd(m.syncView.browser.absPath)
@@ -770,23 +771,21 @@ func loadSessionsCmd(mgr *session.Manager) tea.Cmd {
 func loadSyncedDirsCmd(mgr *session.Manager) tea.Cmd {
 	return func() tea.Msg {
 		// Check for synced folders at ~/.fusebox/sync/
-		out, err := mgr.SSH.Run(mgr.ServerPath() + " sandbox-status")
-		if err == nil && strings.Contains(string(out), `"synced":[`) {
-			// Parse synced dirs from sandbox-status JSON
-			// Look for entries in ~/.fusebox/sync/*/
-			syncOut, err := mgr.SSH.Run("ls -1d ~/.fusebox/sync/*/ 2>/dev/null | head -20")
-			if err == nil && strings.TrimSpace(string(syncOut)) != "" {
-				var dirs []string
-				for _, line := range strings.Split(strings.TrimSpace(string(syncOut)), "\n") {
-					line = strings.TrimSpace(line)
-					line = strings.TrimSuffix(line, "/")
-					if line != "" {
-						dirs = append(dirs, line)
-					}
+		syncOut, err := mgr.SSH.Run("ls -1d ~/.fusebox/sync/*/ 2>/dev/null | head -20")
+		if err == nil && strings.TrimSpace(string(syncOut)) != "" {
+			var dirs []string
+			for _, line := range strings.Split(strings.TrimSpace(string(syncOut)), "\n") {
+				line = strings.TrimSpace(line)
+				line = strings.TrimSuffix(line, "/")
+				if line != "" {
+					dirs = append(dirs, line)
 				}
-				if len(dirs) > 0 {
-					return dirsLoadedMsg{dirs: dirs}
-				}
+			}
+			if len(dirs) > 0 {
+				// Get the sync base dir for display stripping
+				syncBase, _ := mgr.SSH.Run("echo ~/.fusebox/sync")
+				base := strings.TrimSpace(string(syncBase))
+				return dirsLoadedMsg{dirs: dirs, homeDir: base}
 			}
 		}
 		// Fall back to legacy browse roots

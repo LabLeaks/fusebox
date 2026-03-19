@@ -109,6 +109,9 @@ func (m syncModel) View() string {
 		return m.viewAdd(&b)
 	}
 
+	b.WriteString("  Folders synced between your machine and the server.\n")
+	b.WriteString("  Changes sync both ways — your IDE and Claude see the same files.\n\n")
+
 	if m.err != nil {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
 		b.WriteString("\n\n")
@@ -143,14 +146,15 @@ func (m syncModel) View() string {
 		b.WriteString("\n\n")
 	}
 
-	help := "  [a] add folder  [d] remove  [esc] back"
-	b.WriteString(helpStyle.Render(help))
+	b.WriteString("  [a] add folder  [d] remove  [esc] back\n")
 
 	return b.String()
 }
 
 func (m syncModel) viewAdd(b *strings.Builder) string {
-	b.WriteString("  Pick a folder to sync:\n")
+	b.WriteString("  Choose a local folder to sync to the server.\n")
+	b.WriteString("  Use [→] to browse inside, [enter] to start syncing.\n\n")
+
 	if path := m.browser.DisplayPath(); path != "" {
 		b.WriteString(helpStyle.Render(fmt.Sprintf("  %s", path)))
 		b.WriteString("\n")
@@ -159,8 +163,19 @@ func (m syncModel) viewAdd(b *strings.Builder) string {
 	b.WriteString(m.browser.ViewFilter())
 	b.WriteString("\n")
 
-	noIndicator := func(dirBrowserEntry) string { return "" }
-	b.WriteString(m.browser.ViewEntries(noIndicator))
+	// Show "synced" indicator for already-synced folders
+	syncedPaths := make(map[string]bool)
+	for _, s := range m.sessions {
+		syncedPaths[filepath.Base(s.Local)] = true
+	}
+
+	syncIndicator := func(e dirBrowserEntry) string {
+		if syncedPaths[e.name] && m.browser.AtRoot() {
+			return stepDoneStyle.Render("✓") + " "
+		}
+		return "  "
+	}
+	b.WriteString(m.browser.ViewEntries(syncIndicator))
 
 	b.WriteString("\n")
 	help := "  [enter] sync this folder  [→] open  [/] filter"
@@ -169,7 +184,7 @@ func (m syncModel) viewAdd(b *strings.Builder) string {
 	} else {
 		help += "  [esc] cancel"
 	}
-	b.WriteString(helpStyle.Render(help))
+	b.WriteString("  " + help + "\n")
 
 	return b.String()
 }

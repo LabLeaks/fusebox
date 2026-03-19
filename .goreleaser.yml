@@ -29,8 +29,6 @@ builds:
     goarch:
       - amd64
       - arm64
-    tags:
-      - embed_server
 
 archives:
   - id: binaries

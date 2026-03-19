@@ -556,7 +556,8 @@ func TestDashboard_TeamDetailEscReturns(t *testing.T) {
 	waitFor(t, tm, "Teammates")
 
 	sendKey(tm, tea.KeyEscape)
-	waitFor(t, tm, "2 active sessions")
+	// Check for dashboard elements — "2 active sessions" can be split by terminal escape codes
+	waitForAll(t, tm, "project-a", "project-b", "[n] new")
 }
 
 func TestDashboard_NoTeams_TKeyNoop(t *testing.T) {

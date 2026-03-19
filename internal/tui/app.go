@@ -276,19 +276,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mutagenStatusMsg:
 		if msg.err != nil {
-			m.mutagen = mutagenErr.Render("mutagen: error")
+			m.mutagen = mutagenErr.Render("sync: error")
 		} else if msg.status != "" {
-			m.mutagen = mutagenOK.Render("mutagen: " + msg.status)
+			m.mutagen = mutagenOK.Render("sync: " + msg.status)
 		}
 		return m, nil
 
 	case sandboxStatusMsg:
+		// Sandbox is invisible when working. Only surface errors.
 		if msg.err != nil {
 			m.sandbox = mutagenErr.Render("sandbox: error")
-		} else if msg.running {
-			m.sandbox = mutagenOK.Render("sandbox: running")
 		} else {
-			m.sandbox = "" // don't clutter when stopped
+			m.sandbox = ""
 		}
 		return m, nil
 

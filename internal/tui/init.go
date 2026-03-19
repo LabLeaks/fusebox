@@ -479,13 +479,9 @@ func (m InitModel) View() tea.View {
 		b.WriteString(helpStyle.Render("  [enter] continue  [esc] back"))
 		b.WriteString("\n")
 	case stepDirs:
-		if m.sandboxOn {
-			b.WriteString("  Select folders to sync (bidirectional, via mutagen):\n")
-			b.WriteString(helpStyle.Render("  Your local files ↔ server. Both Claude and your IDE see the same code."))
-			b.WriteString("\n")
-		} else {
-			b.WriteString("  Select browse roots (directories scanned for projects):\n")
-		}
+		b.WriteString("  What folders do you want to work on?\n")
+		b.WriteString(helpStyle.Render("  These will be synced to the server and available for Claude sessions."))
+		b.WriteString("\n")
 		if path := m.browser.DisplayPath(); path != "" {
 			b.WriteString(helpStyle.Render(fmt.Sprintf("  %s", path)))
 			b.WriteString("\n")
@@ -596,10 +592,7 @@ func (m InitModel) renderSandboxLine(b *strings.Builder) {
 }
 
 func (m InitModel) renderDirsLine(b *strings.Builder) {
-	label := "Browse Roots"
-	if m.sandboxOn {
-		label = "Sync Folders"
-	}
+	label := "Folders"
 	if m.step > stepDirs {
 		count := len(m.selected)
 		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %d selected", label, count)))

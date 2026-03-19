@@ -4,7 +4,7 @@ Remote Claude Code session manager. One binary — TUI dashboard on your machine
 
 ```
 ┌───────────────────────────────────────────────┐
-│  WORK · spotless-1 · 3 active sessions        │
+│  WORK · my-server · 3 active sessions        │
 ├───────────────────────────────────────────────┤
 │ Session        Directory      Up   Status     │
 │▸ethics-mapper  lableaks/proj… 2h   Edit app.go│
@@ -204,7 +204,7 @@ Dev builds (`make build`, `go build`) work normally but `work init` will show a 
 ## Architecture
 
 ```
-Mac (client)                    spotless-1 (server)
+Mac (client)                    my-server (server)
 ┌─────────┐   SSH commands      ┌──────────────┐
 │  work    │ ──────────────────▸ │    work       │
 │  (TUI)   │ ◂────────────────── │  (same bin)   │

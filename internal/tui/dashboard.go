@@ -223,7 +223,7 @@ func (m dashboardModel) View() string {
 			}
 		}
 	}
-	help += "  [d] stop  [s] folders  [p] preview  [q] quit"
+	help += "  [d] stop  [s] synced folders  [p] preview  [q] quit"
 	b.WriteString(helpStyle.Render(help))
 
 	return b.String()

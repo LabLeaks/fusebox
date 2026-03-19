@@ -288,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.running {
 			m.sandbox = mutagenOK.Render("sandbox: running")
 		} else {
-			m.sandbox = helpStyle.Render("sandbox: stopped")
+			m.sandbox = "" // don't clutter when stopped
 		}
 		return m, nil
 

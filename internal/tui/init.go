@@ -479,7 +479,13 @@ func (m InitModel) View() tea.View {
 		b.WriteString(helpStyle.Render("  [enter] continue  [esc] back"))
 		b.WriteString("\n")
 	case stepDirs:
-		b.WriteString("  Select browse roots (directories scanned for projects):\n")
+		if m.sandboxOn {
+			b.WriteString("  Select folders to sync (bidirectional, via mutagen):\n")
+			b.WriteString(helpStyle.Render("  Your local files ↔ server. Both Claude and your IDE see the same code."))
+			b.WriteString("\n")
+		} else {
+			b.WriteString("  Select browse roots (directories scanned for projects):\n")
+		}
 		if path := m.browser.DisplayPath(); path != "" {
 			b.WriteString(helpStyle.Render(fmt.Sprintf("  %s", path)))
 			b.WriteString("\n")
@@ -590,15 +596,19 @@ func (m InitModel) renderSandboxLine(b *strings.Builder) {
 }
 
 func (m InitModel) renderDirsLine(b *strings.Builder) {
+	label := "Browse Roots"
+	if m.sandboxOn {
+		label = "Sync Folders"
+	}
 	if m.step > stepDirs {
 		count := len(m.selected)
-		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %d selected", "Browse Roots", count)))
+		b.WriteString(stepDoneStyle.Render(fmt.Sprintf("  ✓ %-12s %d selected", label, count)))
 		b.WriteString("\n")
 	} else if m.step == stepDirs {
-		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %-12s", "Browse Roots")))
+		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %-12s", label)))
 		b.WriteString("\n")
 	} else {
-		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", "Browse Roots")))
+		b.WriteString(stepPendingStyle.Render(fmt.Sprintf("    %-12s", label)))
 		b.WriteString("\n")
 	}
 }

@@ -393,7 +393,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingDirs = true
 			return m, loadDirsCmd(m.manager)
 		case keySync:
-			m.settings = newSettingsModel(m.syncMgr, m.cfg.Claude.Teams)
+			m.settings = newSettingsModel(m.syncMgr, &m.cfg, m.ssh, m.cfg.ResolveServerPath())
 			m.view = viewSettings
 			return m, loadSyncSessionsCmd(m.syncMgr)
 		case keyAttach:
@@ -599,59 +599,63 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, browseCmd
 		}
 
-		// Global settings keys
 		switch kmsg.String() {
 		case keyEsc:
 			m.view = viewDashboard
 			return m, nil
-		case "tab":
-			m.settings.section = (m.settings.section + 1) % sectionCount
-			return m, nil
-		}
-
-		// Section-specific keys
-		switch m.settings.section {
-		case sectionSyncedFolders:
-			switch kmsg.String() {
-			case "a":
-				m.settings.adding = true
-				home, _ := os.UserHomeDir()
-				m.settings.browser = newDirBrowser(home)
-				return m, scanLocalDirsCmd(home)
-			case keyStop: // d = remove
-				if len(m.settings.sessions) > 0 && m.settings.syncConfirm == "" {
-					s := m.settings.sessions[m.settings.syncCursor]
-					m.settings.syncConfirm = s.Local
-				}
-				return m, nil
-			case "y":
-				if m.settings.syncConfirm != "" {
-					path := m.settings.syncConfirm
-					m.settings.syncConfirm = ""
-					return m, syncRemoveCmd(m.syncMgr, path)
-				}
-				return m, nil
-			case "up":
-				if m.settings.syncCursor > 0 {
-					m.settings.syncCursor--
-				}
-				return m, nil
-			case "down":
-				if m.settings.syncCursor < len(m.settings.sessions)-1 {
-					m.settings.syncCursor++
-				}
-				return m, nil
-			default:
-				if m.settings.syncConfirm != "" {
-					m.settings.syncConfirm = ""
-					return m, nil
-				}
+		// Synced folders
+		case "a":
+			m.settings.adding = true
+			home, _ := os.UserHomeDir()
+			m.settings.browser = newDirBrowser(home)
+			return m, scanLocalDirsCmd(home)
+		case keyStop: // d = remove
+			if len(m.settings.sessions) > 0 && m.settings.syncConfirm == "" {
+				s := m.settings.sessions[m.settings.syncCursor]
+				m.settings.syncConfirm = s.Local
 			}
-		case sectionTeams:
-			switch kmsg.String() {
-			case "space":
-				m.settings.teamsEnabled = !m.settings.teamsEnabled
-				m.cfg.Claude.Teams = m.settings.teamsEnabled
+			return m, nil
+		case "y":
+			if m.settings.syncConfirm != "" {
+				path := m.settings.syncConfirm
+				m.settings.syncConfirm = ""
+				return m, syncRemoveCmd(m.syncMgr, path)
+			}
+			return m, nil
+		case "up":
+			if m.settings.syncCursor > 0 {
+				m.settings.syncCursor--
+			}
+			return m, nil
+		case "down":
+			if m.settings.syncCursor < len(m.settings.sessions)-1 {
+				m.settings.syncCursor++
+			}
+			return m, nil
+		// Toggles
+		case "m":
+			current := m.cfg.Claude.Model
+			if current == "" {
+				current = "sonnet"
+			}
+			m.cfg.Claude.Model = cycleValue(current, models)
+			return m, saveDefaultsCmd(m.ssh, &m.cfg)
+		case "e":
+			current := m.cfg.Claude.Effort
+			if current == "" {
+				current = "high"
+			}
+			m.cfg.Claude.Effort = cycleValue(current, efforts)
+			return m, saveDefaultsCmd(m.ssh, &m.cfg)
+		case "t":
+			m.cfg.Claude.Teams = !m.cfg.Claude.Teams
+			return m, saveDefaultsCmd(m.ssh, &m.cfg)
+		case "l":
+			m.cfg.Tmux.Passthrough = !m.cfg.Tmux.Passthrough
+			return m, saveDefaultsCmd(m.ssh, &m.cfg)
+		default:
+			if m.settings.syncConfirm != "" {
+				m.settings.syncConfirm = ""
 				return m, nil
 			}
 		}

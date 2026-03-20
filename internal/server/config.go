@@ -21,6 +21,28 @@ func LoadRoots() ([]string, error) {
 	return parseRoots(string(data)), nil
 }
 
+// LoadDefaults reads session defaults from ~/.config/fusebox/defaults.conf.
+// Returns nil if the file doesn't exist. Format: key=value per line.
+func LoadDefaults() map[string]string {
+	home, _ := os.UserHomeDir()
+	path := filepath.Join(home, ".config", "fusebox", "defaults.conf")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	defaults := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok {
+			defaults[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return defaults
+}
+
 // parseRoots splits a roots.conf file into lines, skipping empties.
 func parseRoots(content string) []string {
 	var roots []string

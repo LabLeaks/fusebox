@@ -50,6 +50,15 @@ func doCreate(name, dir string, opts createOpts) (string, error) {
 
 	// Create tmux session
 	tmuxCmd := claudeBin + " " + claudeFlags
+	// Apply defaults from server config
+	if defaults := LoadDefaults(); defaults != nil {
+		if defaults["model"] != "" {
+			tmuxCmd += " --model " + defaults["model"]
+		}
+		if defaults["effort"] != "" {
+			tmuxCmd += " --effort " + defaults["effort"]
+		}
+	}
 	if opts.Resume {
 		tmuxCmd += " --resume"
 	}

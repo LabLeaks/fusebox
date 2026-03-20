@@ -29,8 +29,10 @@ type Server struct {
 }
 
 type Claude struct {
-	Flags string `yaml:"flags"`
-	Teams bool   `yaml:"teams,omitempty"`
+	Flags  string `yaml:"flags"`
+	Teams  bool   `yaml:"teams,omitempty"`
+	Model  string `yaml:"model,omitempty"`  // sonnet, opus, haiku
+	Effort string `yaml:"effort,omitempty"` // low, medium, high, max
 }
 
 type Tmux struct {

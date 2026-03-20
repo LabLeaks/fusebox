@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lableaks/fusebox/internal/config"
 	syncpkg "github.com/lableaks/fusebox/internal/sync"
 )
 
@@ -33,38 +34,41 @@ type localDirsLoadedMsg struct {
 	err     error
 }
 
-// settingsSection tracks which section is active.
-type settingsSection int
+type defaultsSavedMsg struct {
+	err error
+}
 
-const (
-	sectionSyncedFolders settingsSection = iota
-	sectionTeams
-	sectionCount // sentinel for wrapping
-)
+var models = []string{"sonnet", "opus", "haiku"}
+var efforts = []string{"low", "medium", "high", "max"}
 
 // settingsModel manages the settings view.
 type settingsModel struct {
-	section settingsSection
-
 	// Synced folders
 	sessions    []syncpkg.SyncSession
 	syncCursor  int
-	syncConfirm string // non-empty = confirming remove
+	syncConfirm string
 	syncErr     error
 	adding      bool
 	browser     dirBrowser
 	mgr         *syncpkg.Manager
 
-	// Teams
-	teamsEnabled bool
+	// Toggles
+	cfg *config.Config // pointer so changes propagate
+
+	runner interface {
+		Run(command string) ([]byte, error)
+	}
+	serverPath string
 }
 
-func newSettingsModel(mgr *syncpkg.Manager, teamsEnabled bool) settingsModel {
+func newSettingsModel(mgr *syncpkg.Manager, cfg *config.Config, runner interface{ Run(string) ([]byte, error) }, serverPath string) settingsModel {
 	home, _ := os.UserHomeDir()
 	return settingsModel{
-		mgr:          mgr,
-		browser:      newDirBrowser(home),
-		teamsEnabled: teamsEnabled,
+		mgr:        mgr,
+		browser:    newDirBrowser(home),
+		cfg:        cfg,
+		runner:     runner,
+		serverPath: serverPath,
 	}
 }
 
@@ -107,6 +111,9 @@ func (m settingsModel) Update(msg tea.Msg) (settingsModel, tea.Cmd) {
 			m.browser.SetEntries(msg.entries)
 		}
 		return m, nil
+
+	case defaultsSavedMsg:
+		return m, nil
 	}
 
 	return m, nil
@@ -122,74 +129,69 @@ func (m settingsModel) View() string {
 		return m.viewSyncAdd(&b)
 	}
 
-	// Section: Synced Folders
-	m.renderSectionHeader(&b, sectionSyncedFolders, "Synced Folders")
-	if m.section == sectionSyncedFolders {
-		b.WriteString("  Files sync both ways — your IDE and Claude see the same code.\n\n")
+	// Synced Folders
+	b.WriteString("  Synced Folders\n")
+	b.WriteString("  " + helpStyle.Render("Files sync both ways — your IDE and Claude see the same code.") + "\n\n")
 
-		if m.syncErr != nil {
-			b.WriteString(errorStyle.Render(fmt.Sprintf("  Error: %v", m.syncErr)))
-			b.WriteString("\n\n")
-		}
+	if m.syncErr != nil {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("  Error: %v", m.syncErr)))
+		b.WriteString("\n\n")
+	}
 
-		if len(m.sessions) == 0 {
-			b.WriteString("  No folders synced yet. Press [a] to add one.\n\n")
-		} else {
-			for i, s := range m.sessions {
-				cursor := "  "
-				if i == m.syncCursor {
-					cursor = "▸ "
-				}
-
-				local := s.Local
-				if home, err := os.UserHomeDir(); err == nil {
-					local = strings.Replace(local, home, "~", 1)
-				}
-
-				status := s.Status
-				if status == "" {
-					status = "unknown"
-				}
-
-				b.WriteString(fmt.Sprintf("  %s%-30s  %s\n", cursor, local, helpStyle.Render(status)))
+	if len(m.sessions) == 0 {
+		b.WriteString("  " + helpStyle.Render("No folders synced yet.") + "\n\n")
+	} else {
+		for i, s := range m.sessions {
+			cursor := "  "
+			if i == m.syncCursor {
+				cursor = "▸ "
 			}
-			b.WriteString("\n")
+			local := s.Local
+			if home, err := os.UserHomeDir(); err == nil {
+				local = strings.Replace(local, home, "~", 1)
+			}
+			status := s.Status
+			if status == "" {
+				status = "unknown"
+			}
+			b.WriteString(fmt.Sprintf("  %s%-30s  %s\n", cursor, local, helpStyle.Render(status)))
 		}
-
-		if m.syncConfirm != "" {
-			b.WriteString(errorStyle.Render(fmt.Sprintf("  Remove sync %q? [y/n]", m.syncConfirm)))
-			b.WriteString("\n\n")
-		}
-
-		b.WriteString("  [a] add  [d] remove\n")
+		b.WriteString("\n")
 	}
+	b.WriteString("  [a] add  [d] remove\n")
+
+	// Divider
 	b.WriteString("\n")
 
-	// Section: Teams
-	m.renderSectionHeader(&b, sectionTeams, "Agent Teams")
-	if m.section == sectionTeams {
-		ind := checkOff.String()
-		if m.teamsEnabled {
-			ind = checkOn.String()
-		}
-		b.WriteString(fmt.Sprintf("  %s  Enable agent teams for new sessions  [space]\n", ind))
-		b.WriteString("  " + helpStyle.Render("Teams let Claude spawn parallel teammates for complex tasks.") + "\n")
-	}
-	b.WriteString("\n")
+	// Session defaults
+	b.WriteString("  Session Defaults\n\n")
 
-	// Footer
-	b.WriteString("  [tab] next section  [esc] back\n")
+	model := m.cfg.Claude.Model
+	if model == "" {
+		model = "sonnet"
+	}
+	effort := m.cfg.Claude.Effort
+	if effort == "" {
+		effort = "high"
+	}
+	teams := "OFF"
+	if m.cfg.Claude.Teams {
+		teams = "ON"
+	}
+	passthrough := "OFF"
+	if m.cfg.Tmux.Passthrough {
+		passthrough = "ON"
+	}
+
+	b.WriteString(fmt.Sprintf("  Model              %s  [m]\n", stepActiveStyle.Render(model)))
+	b.WriteString(fmt.Sprintf("  Effort             %s  [e]\n", stepActiveStyle.Render(effort)))
+	b.WriteString(fmt.Sprintf("  Agent Teams        %s  [t]\n", stepActiveStyle.Render(teams)))
+	b.WriteString(fmt.Sprintf("  Clickable Links    %s  [l]\n", stepActiveStyle.Render(passthrough)))
+
+	b.WriteString("\n")
+	b.WriteString("  [esc] back\n")
 
 	return b.String()
-}
-
-func (m settingsModel) renderSectionHeader(b *strings.Builder, section settingsSection, label string) {
-	if m.section == section {
-		b.WriteString(stepActiveStyle.Render(fmt.Sprintf("  ● %s", label)))
-	} else {
-		b.WriteString(helpStyle.Render(fmt.Sprintf("    %s", label)))
-	}
-	b.WriteString("\n")
 }
 
 func (m settingsModel) viewSyncAdd(b *strings.Builder) string {
@@ -227,6 +229,45 @@ func (m settingsModel) viewSyncAdd(b *strings.Builder) string {
 	b.WriteString("  " + help + "\n")
 
 	return b.String()
+}
+
+// cycleValue returns the next value in a list, wrapping around.
+func cycleValue(current string, values []string) string {
+	for i, v := range values {
+		if v == current {
+			return values[(i+1)%len(values)]
+		}
+	}
+	return values[0]
+}
+
+// saveDefaultsCmd writes session defaults to the server.
+func saveDefaultsCmd(runner interface{ Run(string) ([]byte, error) }, cfg *config.Config) tea.Cmd {
+	return func() tea.Msg {
+		// Save locally
+		if err := config.Save(*cfg); err != nil {
+			return defaultsSavedMsg{err: err}
+		}
+
+		// Write defaults.conf on server
+		var lines []string
+		if cfg.Claude.Model != "" {
+			lines = append(lines, "model="+cfg.Claude.Model)
+		}
+		if cfg.Claude.Effort != "" {
+			lines = append(lines, "effort="+cfg.Claude.Effort)
+		}
+		content := strings.Join(lines, "\n")
+		cmd := fmt.Sprintf("cat > ~/.config/fusebox/defaults.conf << 'EOF'\n%s\nEOF", content)
+		runner.Run(cmd)
+
+		// Apply passthrough on server
+		if cfg.Tmux.Passthrough {
+			runner.Run("tmux set -g allow-passthrough on 2>/dev/null; grep -q allow-passthrough ~/.tmux.conf 2>/dev/null || echo 'set -g allow-passthrough on' >> ~/.tmux.conf")
+		}
+
+		return defaultsSavedMsg{}
+	}
 }
 
 // Commands

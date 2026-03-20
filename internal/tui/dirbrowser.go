@@ -195,7 +195,7 @@ func (b *dirBrowser) Update(msg tea.Msg) (dirBrowserAction, tea.Cmd) {
 		}
 		return dirBrowserNone, nil
 	case keyAttach, "right": // drill down
-		if e, ok := b.SelectedEntry(); ok && e.count > 0 {
+		if e, ok := b.SelectedEntry(); ok {
 			b.absPath = b.absPath + "/" + e.name
 			b.cursor = 0
 			b.scanning = true

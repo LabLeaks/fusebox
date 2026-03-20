@@ -18,8 +18,7 @@ type subdirsLoadedMsg struct {
 }
 
 type createModel struct {
-	browser      dirBrowser
-	teamsEnabled bool
+	browser dirBrowser
 }
 
 func newCreateWithCounts(dirs []string, homeDir string, counts map[string]int) createModel {
@@ -117,23 +116,12 @@ func (m createModel) View() string {
 	noIndicator := func(dirBrowserEntry) string { return "" }
 	b.WriteString(m.browser.ViewEntries(noIndicator))
 
-	// Options
-	teamsLabel := "OFF"
-	if m.teamsEnabled {
-		teamsLabel = "ON"
-	}
-	b.WriteString(fmt.Sprintf("\n  Teams: %s\n", teamsLabel))
-
 	b.WriteString("\n")
 	var help string
 	if e, ok := m.browser.SelectedEntry(); ok {
-		if e.count > 0 {
-			help = fmt.Sprintf("  [→] open  [n] new  [r] resume \"%s\"", e.name)
-		} else {
-			help = fmt.Sprintf("  [n] new  [r] resume \"%s\"", e.name)
-		}
+		help = fmt.Sprintf("  [n] new  [r] resume \"%s\"  [→] open", e.name)
 	}
-	help += "  [t] teams  [/] filter"
+	help += "  [/] filter"
 	if !m.browser.AtRoot() {
 		help += "  [←] up"
 	} else {

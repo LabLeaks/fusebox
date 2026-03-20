@@ -468,12 +468,6 @@ func (m *Model) resizeLayout() {
 }
 
 func (m Model) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle teams toggle before browser
-	if kmsg, ok := msg.(tea.KeyPressMsg); ok && kmsg.String() == keyTeams && !m.create.browser.filtering {
-		m.create.teamsEnabled = !m.create.teamsEnabled
-		return m, nil
-	}
-
 	// Let the browser handle the message first
 	action, browseCmd := m.create.browser.Update(msg)
 
@@ -488,7 +482,7 @@ func (m Model) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewDashboard
 			m.dashboard.addPendingSession(name, dir)
 			m.resizeLayout()
-			if m.create.teamsEnabled {
+			if m.cfg.Claude.Teams {
 				return m, createTeamSessionCmd(m.manager, name, dir)
 			}
 			return m, createSessionCmd(m.manager, name, dir)
@@ -501,7 +495,7 @@ func (m Model) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewDashboard
 			m.dashboard.addPendingSession(name, dir)
 			m.resizeLayout()
-			if m.create.teamsEnabled {
+			if m.cfg.Claude.Teams {
 				return m, createTeamResumeCmd(m.manager, name, dir)
 			}
 			return m, createResumeCmd(m.manager, name, dir)

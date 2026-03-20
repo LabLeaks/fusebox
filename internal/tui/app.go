@@ -393,7 +393,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingDirs = true
 			return m, loadDirsCmd(m.manager)
 		case keySync:
-			m.settings = newSettingsModel(m.syncMgr, &m.cfg, m.ssh, m.cfg.ResolveServerPath())
+			m.settings = newSettingsModel(m.syncMgr)
 			m.view = viewSettings
 			return m, loadSyncSessionsCmd(m.syncMgr)
 		case keyAttach:
@@ -725,7 +725,7 @@ func (m Model) View() tea.View {
 	case viewTeamDetail:
 		b.WriteString(m.teamDetail.View())
 	case viewSettings:
-		b.WriteString(m.settings.View())
+		b.WriteString(m.settings.View(m.cfg))
 	}
 
 	if m.mutagen != "" {

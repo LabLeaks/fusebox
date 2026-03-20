@@ -51,24 +51,13 @@ type settingsModel struct {
 	adding      bool
 	browser     dirBrowser
 	mgr         *syncpkg.Manager
-
-	// Toggles
-	cfg *config.Config // pointer so changes propagate
-
-	runner interface {
-		Run(command string) ([]byte, error)
-	}
-	serverPath string
 }
 
-func newSettingsModel(mgr *syncpkg.Manager, cfg *config.Config, runner interface{ Run(string) ([]byte, error) }, serverPath string) settingsModel {
+func newSettingsModel(mgr *syncpkg.Manager) settingsModel {
 	home, _ := os.UserHomeDir()
 	return settingsModel{
-		mgr:        mgr,
-		browser:    newDirBrowser(home),
-		cfg:        cfg,
-		runner:     runner,
-		serverPath: serverPath,
+		mgr:     mgr,
+		browser: newDirBrowser(home),
 	}
 }
 
@@ -119,7 +108,7 @@ func (m settingsModel) Update(msg tea.Msg) (settingsModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m settingsModel) View() string {
+func (m settingsModel) View(cfg config.Config) string {
 	var b strings.Builder
 
 	b.WriteString(headerStyle.Render("  Settings  "))
@@ -160,26 +149,25 @@ func (m settingsModel) View() string {
 	}
 	b.WriteString("  [a] add  [d] remove\n")
 
-	// Divider
 	b.WriteString("\n")
 
 	// Session defaults
 	b.WriteString("  Session Defaults\n\n")
 
-	model := m.cfg.Claude.Model
+	model := cfg.Claude.Model
 	if model == "" {
 		model = "sonnet"
 	}
-	effort := m.cfg.Claude.Effort
+	effort := cfg.Claude.Effort
 	if effort == "" {
 		effort = "high"
 	}
 	teams := "OFF"
-	if m.cfg.Claude.Teams {
+	if cfg.Claude.Teams {
 		teams = "ON"
 	}
 	passthrough := "OFF"
-	if m.cfg.Tmux.Passthrough {
+	if cfg.Tmux.Passthrough {
 		passthrough = "ON"
 	}
 

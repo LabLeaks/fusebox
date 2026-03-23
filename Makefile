@@ -27,8 +27,10 @@ install: build
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(BINARY)
 
-## deploy: build + install client locally, cross-compile server binary, push to server
-deploy: install build-server
+## deploy: build release client (with embedded binaries), cross-compile server, push to server
+deploy: release build-server
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 $(BINARY) $(DESTDIR)$(PREFIX)/bin/$(BINARY)
 	@test -n "$(SERVER)" || (echo "Error: SERVER not set. Use: make deploy SERVER=host SERVER_USER=user" && exit 1)
 	@test -n "$(SERVER_USER)" || (echo "Error: SERVER_USER not set. Use: make deploy SERVER=host SERVER_USER=user" && exit 1)
 	@# Ensure local config exists with server details

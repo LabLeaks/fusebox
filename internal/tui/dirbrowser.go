@@ -317,7 +317,7 @@ func (b *dirBrowser) ViewEntries(isSelected func(entry dirBrowserEntry) string) 
 	}
 
 	if len(b.filtered) > maxVisible {
-		sb.WriteString(fmt.Sprintf("\n  (%d/%d)", len(visible), len(b.filtered)))
+		sb.WriteString(fmt.Sprintf("\n  (%d/%d)", b.cursor+1, len(b.filtered)))
 	}
 
 	return sb.String()

@@ -13,9 +13,10 @@ DESTDIR    :=
 build:
 	go build -o $(BINARY) .
 
-## build-server: cross-compile fusebox binary for linux/arm64
+## build-server: cross-compile fusebox binary for linux (auto-detect arch from SERVER, default arm64)
 build-server:
-	GOOS=linux GOARCH=arm64 go build -o fusebox-server .
+	$(eval SERVER_ARCH := $(or $(shell ssh $(SERVER_USER)@$(SERVER) 'uname -m' 2>/dev/null | sed 's/aarch64/arm64/;s/x86_64/amd64/'),arm64))
+	GOOS=linux GOARCH=$(SERVER_ARCH) go build -o fusebox-server .
 
 ## install: build and install the client binary locally
 install: build

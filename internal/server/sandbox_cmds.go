@@ -3,13 +3,16 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/lableaks/fusebox/internal/sandbox"
 )
 
-// sandboxEnabled returns true — sandbox is always on for remote servers.
+// sandboxEnabled returns true on Linux (remote servers), false on macOS (local mode).
+// On remote servers, the namespace sandbox is always on.
+// On macOS, Claude Code's built-in seatbelt sandbox handles isolation instead.
 func sandboxEnabled() bool {
-	return true
+	return runtime.GOOS == "linux"
 }
 
 func defaultDataDir() string {

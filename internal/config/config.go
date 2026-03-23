@@ -46,8 +46,16 @@ func DefaultConfig() Config {
 	}
 }
 
-// Validate checks that required fields are set.
+// IsLocal returns true when no remote server is configured (local mode).
+func (c Config) IsLocal() bool {
+	return c.Server.Host == ""
+}
+
+// Validate checks that required fields are set for remote mode.
 func (c Config) Validate() error {
+	if c.IsLocal() {
+		return nil // local mode needs no server config
+	}
 	if c.Server.Host == "" {
 		return fmt.Errorf("server.host is required — see config.example.yaml")
 	}
@@ -57,10 +65,14 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// ResolveHomeDir returns the server-side home directory.
+// ResolveHomeDir returns the home directory (local or server-side).
 func (c Config) ResolveHomeDir() string {
 	if c.Server.HomeDir != "" {
 		return c.Server.HomeDir
+	}
+	if c.IsLocal() {
+		home, _ := os.UserHomeDir()
+		return home
 	}
 	return "/home/" + c.Server.User
 }

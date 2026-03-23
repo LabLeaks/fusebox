@@ -131,12 +131,29 @@ func NewWithRunner(cfg config.Config, runner ssh.Runner) Model {
 		spinner.WithSpinner(spinner.MiniDot),
 		spinner.WithStyle(spinnerStyle),
 	)
-	sm := syncpkg.NewManager(cfg.ResolveSandboxDataDir(), cfg.SSHTarget())
+	var sm *syncpkg.Manager
+	if !cfg.IsLocal() {
+		sm = syncpkg.NewManager(cfg.ResolveSandboxDataDir(), cfg.SSHTarget())
+	}
+
+	host := cfg.Server.Host
+	if cfg.IsLocal() {
+		host, _ = os.Hostname()
+	}
+
+	serverPath := cfg.ResolveServerPath()
+	if cfg.IsLocal() {
+		// For local mode, find our own executable
+		if exe, err := os.Executable(); err == nil {
+			serverPath = exe
+		}
+	}
+
 	return Model{
 		cfg:       cfg,
 		ssh:       runner,
-		manager:   session.NewManager(runner, cfg.ResolveServerPath()),
-		dashboard: newDashboard(nil, cfg.Server.Host, cfg.ResolveHomeDir()),
+		manager:   session.NewManager(runner, serverPath),
+		dashboard: newDashboard(nil, host, cfg.ResolveHomeDir()),
 		preview:   viewport.New(),
 		loading:   true,
 		spinner:   s,

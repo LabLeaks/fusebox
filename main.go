@@ -101,19 +101,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.Server.Host == "" {
-		server.CmdLocal(nil)
-		return
-	}
-
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// If we're on the server, use local execution instead of SSH
+	// Determine runner: local mode, on-server, or remote SSH
 	var model tui.Model
-	if isLocalHost(cfg.Server.Host) {
+	if cfg.IsLocal() {
+		exe, _ := os.Executable()
+		runner := ssh.NewLocalRunner(exe)
+		model = tui.NewWithRunner(cfg, runner)
+	} else if isLocalHost(cfg.Server.Host) {
 		runner := ssh.NewLocalRunner(cfg.ResolveServerPath())
 		model = tui.NewWithRunner(cfg, runner)
 	} else {

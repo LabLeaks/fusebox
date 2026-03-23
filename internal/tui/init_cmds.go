@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -283,4 +284,63 @@ func setupSyncCmd(host, user, homeDir, relPath string) tea.Cmd {
 func runLocalCmd(command string) ([]byte, error) {
 	cmd := newExecCommand("sh", "-c", command)
 	return cmd.Output()
+}
+
+// discoverLocalDirsCmd lists non-hidden subdirectories at scanPath on the local machine.
+func discoverLocalDirsCmd(scanPath string) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := os.ReadDir(scanPath)
+		if err != nil {
+			return dirsFoundMsg{err: fmt.Errorf("failed to list directories: %w", err)}
+		}
+
+		var dirs []dirEntry
+		for _, e := range entries {
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			// Count subdirectories
+			count := 0
+			subPath := filepath.Join(scanPath, e.Name())
+			if subs, err := os.ReadDir(subPath); err == nil {
+				for _, s := range subs {
+					if s.IsDir() {
+						count++
+					}
+				}
+			}
+			dirs = append(dirs, dirEntry{path: e.Name(), count: count})
+		}
+
+		return dirsFoundMsg{dirs: dirs}
+	}
+}
+
+// writeLocalConfigCmd writes config for local mode (no server, no sync).
+func writeLocalConfigCmd(homeDir string, roots []string, passthrough bool) tea.Cmd {
+	return func() tea.Msg {
+		// Build browse_roots with absolute paths
+		browseRoots := make([]string, len(roots))
+		for i, r := range roots {
+			browseRoots[i] = filepath.Join(homeDir, r)
+		}
+
+		cfg := config.DefaultConfig()
+		cfg.BrowseRoots = browseRoots
+		cfg.Tmux.Passthrough = passthrough
+
+		if err := config.Save(cfg); err != nil {
+			return configWrittenMsg{err: fmt.Errorf("failed to save config: %w", err)}
+		}
+
+		// Write roots.conf locally for fusebox dirs command
+		confDir := filepath.Join(homeDir, ".config", "fusebox")
+		os.MkdirAll(confDir, 0755)
+		rootsContent := strings.Join(browseRoots, "\n")
+		if err := os.WriteFile(filepath.Join(confDir, "roots.conf"), []byte(rootsContent), 0644); err != nil {
+			return configWrittenMsg{err: fmt.Errorf("failed to write roots.conf: %w", err)}
+		}
+
+		return configWrittenMsg{}
+	}
 }

@@ -15,6 +15,7 @@ import (
 
 // newInitApp creates a test init model wired to a mock SSH factory.
 // Sets XDG_CONFIG_HOME to a temp dir to prevent loading real config.
+// When no hostArg is given, selects remote mode ('r') to skip the mode screen.
 func newInitApp(t *testing.T, hostArg string, mock *testutil.MockSSH) *teatest.TestModel {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -22,6 +23,11 @@ func newInitApp(t *testing.T, hostArg string, mock *testutil.MockSSH) *teatest.T
 	model := tui.NewInitWithSSH(hostArg, factory)
 	tm := teatest.NewTestModel(t, model, teatest.WithInitialTermSize(100, 30))
 	t.Cleanup(func() { tm.Quit() })
+	// If no host arg, we land on mode selection — pick remote
+	if hostArg == "" {
+		waitFor(t, tm, "Local")
+		tm.Type("r")
+	}
 	return tm
 }
 
@@ -29,7 +35,7 @@ func TestInit_ShowsSetupHeader(t *testing.T) {
 	mock := testutil.NewMockSSH()
 	tm := newInitApp(t, "", mock)
 
-	waitForAll(t, tm, "FUSEBOX", "Setup", "Server")
+	waitFor(t, tm, "Server")
 }
 
 func TestInit_HostToUser(t *testing.T) {
@@ -91,7 +97,7 @@ func TestInit_CtrlCQuits(t *testing.T) {
 	mock := testutil.NewMockSSH()
 	tm := newInitApp(t, "", mock)
 
-	waitFor(t, tm, "Setup")
+	waitFor(t, tm, "Server")
 	tm.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(waitTimeout))
 }

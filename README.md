@@ -33,12 +33,14 @@ Remote Claude Code session manager with managed file sync and optional sandbox i
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/lableaks/fusebox/master/install.sh | bash
-fusebox init user@your-server
+fusebox init
 ```
 
-The installer downloads the right binary for your OS/arch and puts it in `~/.local/bin`. Then `fusebox init` walks you through setup interactively — it tests SSH, deploys the server binary, discovers directories, and writes your config.
+The installer downloads the right binary for your OS/arch and puts it in `~/.local/bin`. Then `fusebox init` walks you through setup — choose local mode (sessions on your Mac) or remote mode (deploy to a server).
 
-The Mac release binary has Linux server binaries embedded, so `fusebox init` just extracts and SCPs — no Go toolchain or cross-compilation needed.
+**Local mode:** Sessions run directly on your Mac with Claude Code's built-in seatbelt sandbox for isolation. System packages and toolchains (Xcode, Homebrew) remain accessible.
+
+**Remote mode:** Deploys the server binary via SSH, sets up mutagen sync, and runs sessions inside a Linux namespace sandbox. The Mac release binary has Linux server binaries embedded — no Go toolchain needed on the server.
 
 ### From source
 

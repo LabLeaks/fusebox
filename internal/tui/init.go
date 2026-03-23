@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/user"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 type initStep int
 
 const (
+	stepMode     initStep = iota // local vs remote
 	stepHost     initStep = iota
 	stepUser     initStep = iota
 	stepConnect  initStep = iota
@@ -36,6 +38,7 @@ const (
 
 type InitModel struct {
 	step       initStep
+	localMode  bool
 	hostInput  textinput.Model
 	userInput  textinput.Model
 	host       string
@@ -85,12 +88,12 @@ func NewInitWithSSH(hostArg string, factory func(host, user string) ssh.Runner) 
 	)
 
 	m := InitModel{
-		step:       stepHost,
+		step:       stepMode,
 		hostInput:  hi,
 		userInput:  ui,
 		sshFactory: factory,
 		spinner:    s,
-		selected: make(map[string]bool),
+		selected:   make(map[string]bool),
 	}
 
 	// Default user to current OS user
@@ -98,7 +101,7 @@ func NewInitWithSSH(hostArg string, factory func(host, user string) ssh.Runner) 
 		m.userInput.SetValue(u.Username)
 	}
 
-	// Parse user@host from argument
+	// Parse user@host from argument — skip mode selection, go straight to remote
 	if hostArg != "" {
 		if at := strings.Index(hostArg, "@"); at >= 0 {
 			m.userInput.SetValue(hostArg[:at])
@@ -113,24 +116,25 @@ func NewInitWithSSH(hostArg string, factory func(host, user string) ssh.Runner) 
 			m.step = stepConnect
 			m.connectSub = subSSH
 			m.progress = "Testing SSH connection..."
+		} else {
+			m.step = stepHost
+			m.hostInput.Focus()
 		}
 	}
 
 	// Check existing config for pre-fill
-	if cfg, err := config.Load(); err == nil && cfg.Server.Host != "" {
-		if m.hostInput.Value() == "" {
-			m.hostInput.SetValue(cfg.Server.Host)
+	if cfg, err := config.Load(); err == nil {
+		if cfg.Server.Host != "" {
+			if m.hostInput.Value() == "" {
+				m.hostInput.SetValue(cfg.Server.Host)
+			}
+			if m.userInput.Value() == "" || m.userInput.Value() == currentUsername() {
+				m.userInput.SetValue(cfg.Server.User)
+			}
+			m.reconfig = true
+		} else if cfg.IsLocal() && len(cfg.BrowseRoots) > 0 {
+			m.reconfig = true
 		}
-		if m.userInput.Value() == "" || m.userInput.Value() == currentUsername() {
-			m.userInput.SetValue(cfg.Server.User)
-		}
-		m.reconfig = true
-	}
-
-	// Focus the appropriate input in the constructor.
-	// Init() has a value receiver, so calling Focus() there would modify a copy.
-	if m.step == stepHost {
-		m.hostInput.Focus()
 	}
 
 	return m
@@ -241,6 +245,11 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = nil
+		// Local mode — no sync needed, files are already local
+		if m.localMode {
+			m.step = stepDone
+			return m, nil
+		}
 		// Start syncing selected folders
 		if len(m.selected) > 0 {
 			m.step = stepSyncing
@@ -276,6 +285,8 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Route to step handlers
 	switch m.step {
+	case stepMode:
+		return m.updateMode(msg)
 	case stepHost:
 		return m.updateHost(msg)
 	case stepUser:
@@ -294,6 +305,25 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDone(msg)
 	}
 
+	return m, nil
+}
+
+func (m InitModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if kmsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch kmsg.String() {
+		case "l":
+			m.localMode = true
+			home, _ := os.UserHomeDir()
+			m.homeDir = home
+			m.browser = newDirBrowser(home)
+			m.step = stepDirs
+			return m, discoverLocalDirsCmd(home)
+		case "r":
+			m.step = stepHost
+			m.hostInput.Focus()
+			return m, nil
+		}
+	}
 	return m, nil
 }
 
@@ -359,8 +389,13 @@ func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch action {
 	case dirBrowserAtRoot:
-		m.step = stepUser
-		m.userInput.Focus()
+		if m.localMode {
+			m.localMode = false
+			m.step = stepMode
+		} else {
+			m.step = stepUser
+			m.userInput.Focus()
+		}
 		return m, nil
 	case dirBrowserSelected: // space — toggle
 		if e, ok := m.browser.SelectedEntry(); ok {
@@ -385,9 +420,15 @@ func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.step = stepSettings
 		return m, nil
 	case dirBrowserDrillIn:
+		if m.localMode {
+			return m, discoverLocalDirsCmd(m.browser.absPath)
+		}
 		return m, discoverDirsCmd(m.host, m.user, m.browser.absPath, m.sshFactory)
 	case dirBrowserDrillUp:
 		if m.browser.scanning {
+			if m.localMode {
+				return m, discoverLocalDirsCmd(m.browser.absPath)
+			}
 			return m, discoverDirsCmd(m.host, m.user, m.browser.absPath, m.sshFactory)
 		}
 		return m, nil
@@ -407,6 +448,9 @@ func (m InitModel) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var roots []string
 			for path := range m.selected {
 				roots = append(roots, path)
+			}
+			if m.localMode {
+				return m, writeLocalConfigCmd(m.homeDir, roots, m.passthrough)
 			}
 			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sshFactory)
 		case keyEsc:
@@ -441,18 +485,31 @@ func (m InitModel) View() tea.View {
 	b.WriteString("\n\n")
 
 	// Step indicators
-	m.renderStepLine(&b, stepHost, "Server", m.host)
-	m.renderStepLine(&b, stepUser, "Username", m.user)
-	m.renderConnectLine(&b)
+	if m.localMode {
+		b.WriteString(stepDoneStyle.Render("  ✓ Mode         local"))
+		b.WriteString("\n")
+	} else if m.step > stepMode {
+		b.WriteString(stepDoneStyle.Render("  ✓ Mode         remote"))
+		b.WriteString("\n")
+		m.renderStepLine(&b, stepHost, "Server", m.host)
+		m.renderStepLine(&b, stepUser, "Username", m.user)
+		m.renderConnectLine(&b)
+	}
 	m.renderDirsLine(&b)
 	m.renderSettingsLine(&b)
 	m.renderWriteLine(&b)
-	m.renderSyncingLine(&b)
+	if !m.localMode {
+		m.renderSyncingLine(&b)
+	}
 
 	b.WriteString("\n")
 
 	// Active step content
 	switch m.step {
+	case stepMode:
+		b.WriteString("  How do you want to run fusebox?\n\n")
+		b.WriteString("  [l]  Local — run Claude sessions on this Mac\n")
+		b.WriteString("  [r]  Remote — deploy to a server\n")
 	case stepHost:
 		if m.err != nil {
 			b.WriteString(stepErrStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
@@ -469,7 +526,11 @@ func (m InitModel) View() tea.View {
 		// progress shown in step line
 	case stepDirs:
 		b.WriteString("  What folders do you want to work on?\n")
-		b.WriteString(helpStyle.Render("  These will be synced to the server and available for Claude sessions."))
+		if m.localMode {
+			b.WriteString(helpStyle.Render("  These will be available as browse roots for Claude sessions."))
+		} else {
+			b.WriteString(helpStyle.Render("  These will be synced to the server and available for Claude sessions."))
+		}
 		b.WriteString("\n")
 		if path := m.browser.DisplayPath(); path != "" {
 			b.WriteString(helpStyle.Render(fmt.Sprintf("  %s", path)))

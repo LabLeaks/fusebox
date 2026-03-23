@@ -20,11 +20,11 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-func TestValidate_MissingHost(t *testing.T) {
+func TestValidate_Local(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Server.User = "someone"
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for missing host")
+	// Local mode (no host) should pass validation
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected no error for local mode, got: %v", err)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestValidate_OK(t *testing.T) {
 }
 
 func TestResolveHomeDir(t *testing.T) {
-	cfg := Config{Server: Server{User: "alice"}}
+	cfg := Config{Server: Server{Host: "myhost", User: "alice"}}
 	if got := cfg.ResolveHomeDir(); got != "/home/alice" {
 		t.Errorf("expected /home/alice, got %s", got)
 	}
@@ -57,8 +57,16 @@ func TestResolveHomeDir(t *testing.T) {
 	}
 }
 
+func TestResolveHomeDir_Local(t *testing.T) {
+	cfg := Config{} // no server = local mode
+	home, _ := os.UserHomeDir()
+	if got := cfg.ResolveHomeDir(); got != home {
+		t.Errorf("expected %s, got %s", home, got)
+	}
+}
+
 func TestResolveServerPath(t *testing.T) {
-	cfg := Config{Server: Server{User: "alice"}}
+	cfg := Config{Server: Server{Host: "myhost", User: "alice"}}
 	if got := cfg.ResolveServerPath(); got != "/home/alice/bin/fusebox" {
 		t.Errorf("expected /home/alice/bin/fusebox, got %s", got)
 	}

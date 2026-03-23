@@ -17,7 +17,6 @@ var defaultIgnores = []string{
 	"venv",
 	".next",
 	".cache",
-	"target",
 	".DS_Store",
 }
 

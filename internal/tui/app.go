@@ -920,7 +920,7 @@ func mutagenHumanize(s string) string {
 	replacer := strings.NewReplacer(
 		"Watching for changes", "ready",
 		"Scanning files", "scanning",
-		"Staging files on alpha", "uploading",
+		"Staging files on alpha", "reading local files",
 		"Staging files on beta", "uploading to server",
 		"Reconciling changes", "syncing",
 		"Saving archive", "finalizing",

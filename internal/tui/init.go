@@ -171,6 +171,10 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Reserve lines for header, step indicators, help text (~14 lines)
+		if avail := m.height - 14; avail > 3 {
+			m.browser.maxVisible = avail
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:

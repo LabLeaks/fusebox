@@ -35,6 +35,7 @@ type dirBrowser struct {
 	rootEntries []dirBrowserEntry // saved top-level entries for restoring
 	filtered    []dirBrowserEntry
 	cursor      int
+	maxVisible  int // max rows to show; 0 = use default (15)
 
 	absPath string // current absolute path
 	homeDir string // home dir for display
@@ -281,7 +282,10 @@ func (b *dirBrowser) ViewEntries(isSelected func(entry dirBrowserEntry) string) 
 	}
 
 	visible := b.filtered
-	maxVisible := 15
+	maxVisible := b.maxVisible
+	if maxVisible <= 0 {
+		maxVisible = 15
+	}
 	offset := 0
 	if b.cursor >= maxVisible {
 		offset = b.cursor - maxVisible + 1

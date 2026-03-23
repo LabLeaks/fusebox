@@ -177,6 +177,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.resizeLayout()
+		// Reserve lines for header, help, etc. (~10 lines)
+		if avail := m.height - 10; avail > 3 {
+			m.create.browser.maxVisible = avail
+		}
 		return m, nil
 
 	case tea.KeyPressMsg:

@@ -408,7 +408,7 @@ func (m InitModel) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for path := range m.selected {
 				roots = append(roots, path)
 			}
-			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sandboxOK, m.sshFactory)
+			return m, writeConfigCmd(m.host, m.user, m.homeDir, roots, m.passthrough, m.sshFactory)
 		case keyEsc:
 			m.step = stepDirs
 			return m, nil

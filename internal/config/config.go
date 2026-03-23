@@ -18,7 +18,6 @@ type Config struct {
 }
 
 type Sandbox struct {
-	Enabled bool   `yaml:"enabled,omitempty"`
 	DataDir string `yaml:"data_dir,omitempty"` // default: ~/.fusebox
 }
 

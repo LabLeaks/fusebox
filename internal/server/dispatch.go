@@ -8,7 +8,6 @@ var serverCommands = map[string]bool{
 	"preview": true, "activity": true, "install-hooks": true,
 	"fix-mouse": true, "hook": true,
 	"teams": true, "teams-toggle": true, "panes": true, "pane-preview": true,
-	"up": true, "down": true, "sandbox-status": true, "update": true,
 }
 
 // Dispatch handles server subcommands. Returns true if the command was handled.
@@ -93,14 +92,6 @@ func Dispatch(cmd string, args []string) bool {
 			ExitError("usage: fusebox create-team-resume <name> <dir>")
 		}
 		CmdCreateTeamResume(args[0], args[1])
-	case "up":
-		CmdUp()
-	case "down":
-		CmdDown()
-	case "sandbox-status":
-		CmdSandboxStatus()
-	case "update":
-		CmdUpdate()
 	}
 	return true
 }

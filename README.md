@@ -90,6 +90,8 @@ fusebox new [filter]     # create session (interactive dir picker)
 fusebox attach [n|name]  # attach to session by number or name
 fusebox kill [n|name]    # stop session by number or name
 fusebox peek [n|name]    # preview session output
+fusebox version          # show version
+fusebox update           # self-update to latest release
 fusebox help             # show all commands
 ```
 
@@ -99,6 +101,8 @@ fusebox help             # show all commands
 fusebox list             # JSON array of sessions
 fusebox create <n> <dir> # create session
 fusebox create-team <n> <dir>  # create session with agent teams enabled
+fusebox create-resume <n> <dir>       # create session with --resume
+fusebox create-team-resume <n> <dir>  # create team session with --resume
 fusebox stop <name>      # stop session
 fusebox dirs             # browsable directories (from roots.conf)
 fusebox subdirs <path>   # list subdirs of path with counts
@@ -138,25 +142,9 @@ Your Mac                              Server
 
 Edit locally → changes appear on server within seconds. Claude edits on server → changes sync back to your IDE.
 
-### Sandbox isolation (Linux, optional)
+### Sandbox isolation
 
-Sandbox mode runs Claude sessions inside a Linux namespace with OverlayFS — an isolated environment where `rm -rf /` can't hurt the host.
-
-```bash
-fusebox up                         # start sandbox (downloads rootfs on first run)
-fusebox down                       # stop sandbox (sync continues)
-fusebox sandbox-status             # show sandbox + sync status
-fusebox update                     # update Claude Code inside sandbox
-```
-
-Enable sandbox during `fusebox init` (detects kernel support automatically) or in config:
-
-```yaml
-sandbox:
-  enabled: true
-```
-
-When sandbox is enabled, `fusebox create` auto-starts it. `fusebox down` kills sessions but doesn't stop sync. Requires kernel ≥5.11 with user namespaces. Falls back to bare-host mode on older kernels.
+Sessions on the server run inside a Linux namespace with OverlayFS — a clean Alpine rootfs where `rm -rf /` can't hurt the host. The sandbox is always on; `fusebox create` manages it automatically. Requires kernel ≥5.11 with user namespaces.
 
 ### Live tool activity
 
@@ -285,7 +273,7 @@ One `fusebox` binary runs everywhere. On the Mac (with config), it launches the 
 
 **Sync layer:** `fusebox sync` wraps mutagen for bidirectional file sync. Runs on the client, independent of the sandbox. Synced files land at `~/.fusebox/sync/<name>/` on the server.
 
-**Sandbox layer:** `fusebox up` creates a Linux namespace with OverlayFS (Alpine rootfs + Node.js + Claude Code). The sandbox bind-mounts synced directories, `~/.claude/`, and `/tmp/fusebox/`. All tmux commands route through a custom socket so existing server tmux is unaffected.
+**Sandbox layer:** Sessions run inside a Linux namespace with OverlayFS (Alpine rootfs + Node.js + Claude Code). The sandbox bind-mounts synced directories, `~/.claude/`, and `/tmp/fusebox/`. All tmux commands route through a custom socket so existing server tmux is unaffected. The sandbox is always on — `fusebox create` starts it automatically.
 
 **Activity:** Claude Code's PostToolUse hook fires `fusebox hook`, which writes status to `/tmp/fusebox/<session>.json`. The dashboard polls every 5 seconds.
 

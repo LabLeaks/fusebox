@@ -21,9 +21,11 @@ func doCreate(name, dir string, opts createOpts) (string, error) {
 		dir = home + dir[1:]
 	}
 
-	// Auto-start sandbox if enabled but not running
+	// Auto-start sandbox if not already running
 	if sandboxEnabled() && tmuxSocket == "" {
-		CmdUp()
+		if err := ensureSandboxUp(); err != nil {
+			return dir, fmt.Errorf("sandbox: %w", err)
+		}
 		// Re-detect socket after starting
 		sock := os.ExpandEnv("$HOME/.fusebox/tmux.sock")
 		if info, err := os.Stat(sock); err == nil && !info.IsDir() {

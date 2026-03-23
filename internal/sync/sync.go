@@ -8,6 +8,21 @@ import (
 	"strings"
 )
 
+// defaultIgnores lists patterns mutagen should skip when syncing.
+var defaultIgnores = []string{
+	".git",
+	"node_modules",
+	"vendor",
+	"__pycache__",
+	".venv",
+	"venv",
+	".next",
+	"dist",
+	".cache",
+	"target",
+	".DS_Store",
+}
+
 // Manager wraps the mutagen CLI for bidirectional file sync.
 type Manager struct {
 	DataDir   string // ~/.fusebox
@@ -69,12 +84,17 @@ func (m *Manager) Add(localPath string) error {
 	}
 
 	bin := m.mutagenBin()
-	cmd := exec.Command(bin, "sync", "create",
+	args := []string{"sync", "create",
 		abs, m.remotePath(abs),
 		"--name", m.syncName(abs),
 		"--label", "fusebox=true",
 		"--sync-mode", "two-way-resolved",
-	)
+	}
+	// Default ignores — skip build artifacts and dependency dirs
+	for _, pattern := range defaultIgnores {
+		args = append(args, "--ignore", pattern)
+	}
+	cmd := exec.Command(bin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mutagen sync create: %s", strings.TrimSpace(string(out)))

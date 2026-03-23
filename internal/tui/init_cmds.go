@@ -212,7 +212,7 @@ func detectSandboxCmd(host, user string, factory func(host, user string) ssh.Run
 }
 
 // writeConfigCmd writes the config file and roots.conf on the server.
-func writeConfigCmd(host, user, homeDir string, roots []string, passthrough, sandboxOn bool, factory func(host, user string) ssh.Runner) tea.Cmd {
+func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool, factory func(host, user string) ssh.Runner) tea.Cmd {
 	return func() tea.Msg {
 		// Build browse_roots with ~ prefix
 		browseRoots := make([]string, len(roots))
@@ -226,7 +226,6 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough, san
 		cfg.Server.HomeDir = homeDir
 		cfg.BrowseRoots = browseRoots
 		cfg.Tmux.Passthrough = passthrough
-		cfg.Sandbox.Enabled = sandboxOn
 
 		if err := config.Save(cfg); err != nil {
 			return configWrittenMsg{err: fmt.Errorf("failed to save config: %w", err)}
@@ -252,12 +251,8 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough, san
 			runner.Run("tmux set -g allow-passthrough on 2>/dev/null; grep -q allow-passthrough ~/.tmux.conf 2>/dev/null || echo 'set -g allow-passthrough on' >> ~/.tmux.conf")
 		}
 
-		// Write sandbox enabled marker on server
-		if sandboxOn {
-			runner.Run("mkdir -p ~/.fusebox && touch ~/.fusebox/enabled")
-		} else {
-			runner.Run("rm -f ~/.fusebox/enabled 2>/dev/null")
-		}
+		// Ensure sandbox data directory exists on server
+		runner.Run("mkdir -p ~/.fusebox")
 
 		return configWrittenMsg{}
 	}

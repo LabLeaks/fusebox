@@ -1,10 +1,6 @@
 internal/embed/fusebox-linux-*
-internal/embed/work-linux-*
 /fusebox
 /fusebox-server
-/work
-/work-cli
-/work-server
 rootfs/fusebox-rootfs-*.tar.gz
 test/e2e/.scratch/
 .claude/

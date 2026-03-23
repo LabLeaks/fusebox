@@ -75,6 +75,7 @@ type activityLoadedMsg struct {
 }
 
 type activityTickMsg time.Time
+type mutagenTickMsg time.Time
 
 type teamsLoadedMsg struct {
 	teams []session.TeamStatus
@@ -306,11 +307,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mutagenStatusMsg:
 		if msg.err != nil {
-			m.mutagen = mutagenErr.Render("sync: error")
+			m.mutagen = mutagenErr.Render("sync: " + msg.status)
 		} else if msg.status != "" {
 			m.mutagen = mutagenOK.Render("sync: " + msg.status)
 		}
-		return m, nil
+		// Poll every 5s to track sync progress
+		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg { return mutagenTickMsg(t) })
+
+	case mutagenTickMsg:
+		return m, loadMutagenCmd()
 
 
 	case previewLoadedMsg:
@@ -910,20 +915,56 @@ func loadMutagenCmd() tea.Cmd {
 		if _, err := exec.LookPath("mutagen"); err != nil {
 			return mutagenStatusMsg{} // not installed, skip silently
 		}
-		out, err := exec.Command("mutagen", "sync", "list").Output()
+		out, err := exec.Command("mutagen", "sync", "list", "--label-selector", "fusebox=true").Output()
 		if err != nil {
 			return mutagenStatusMsg{err: err}
 		}
 		output := string(out)
-		if strings.Contains(output, "Watching for changes") {
-			return mutagenStatusMsg{status: "watching"}
+		if strings.TrimSpace(output) == "" {
+			return mutagenStatusMsg{}
 		}
-		if strings.Contains(output, "Staging") {
-			return mutagenStatusMsg{status: "staging"}
+
+		// Parse per-session status
+		var summary []string
+		hasStaging := false
+		hasError := false
+		name := ""
+		for _, line := range strings.Split(output, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Name:") {
+				name = strings.TrimPrefix(strings.TrimPrefix(trimmed, "Name:"), " fusebox-")
+				name = strings.TrimSpace(name)
+			}
+			if strings.HasPrefix(trimmed, "Status:") {
+				status := strings.TrimSpace(strings.TrimPrefix(trimmed, "Status:"))
+				short := status
+				if strings.Contains(status, "Watching") {
+					short = "synced"
+				} else if strings.Contains(status, "Staging") || strings.Contains(status, "Reconciling") {
+					short = "syncing"
+					hasStaging = true
+				} else if strings.Contains(status, "Error") || strings.Contains(status, "Halted") {
+					short = "error"
+					hasError = true
+				}
+				if name != "" {
+					summary = append(summary, name+": "+short)
+					name = ""
+				}
+			}
 		}
-		if strings.Contains(output, "Error") || strings.Contains(output, "Halted") {
-			return mutagenStatusMsg{status: "error", err: nil}
+
+		if len(summary) == 0 {
+			return mutagenStatusMsg{status: "ok"}
 		}
-		return mutagenStatusMsg{status: "ok"}
+
+		result := strings.Join(summary, " · ")
+		if hasError {
+			return mutagenStatusMsg{status: result, err: fmt.Errorf("sync error")}
+		}
+		if hasStaging {
+			return mutagenStatusMsg{status: result}
+		}
+		return mutagenStatusMsg{status: result}
 	}
 }

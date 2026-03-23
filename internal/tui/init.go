@@ -589,6 +589,12 @@ func (m InitModel) View() tea.View {
 		// progress shown in step line
 	case stepDone:
 		b.WriteString("  Setup complete!\n\n")
+		if !m.localMode && len(m.selected) > 0 {
+			b.WriteString(helpStyle.Render("  Mutagen is syncing your folders in the background."))
+			b.WriteString("\n")
+			b.WriteString(helpStyle.Render("  The dashboard will show sync progress. Files may take a minute to appear on the server."))
+			b.WriteString("\n\n")
+		}
 		b.WriteString(helpStyle.Render("  [enter] launch dashboard  [q] quit"))
 		b.WriteString("\n")
 	}

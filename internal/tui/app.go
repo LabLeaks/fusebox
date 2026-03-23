@@ -259,6 +259,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewDashboard
 			return m, nil
 		}
+		if len(msg.dirs) == 0 {
+			m.dashboard.err = fmt.Errorf("no folders on server yet — mutagen is still syncing. Wait for sync to complete and try again")
+			m.view = viewDashboard
+			return m, nil
+		}
 		homeDir := m.cfg.ResolveHomeDir()
 		if msg.homeDir != "" {
 			homeDir = msg.homeDir
@@ -910,6 +915,20 @@ func loadPanePreviewCmd(mgr *session.Manager, sessionName string, pane int) tea.
 	}
 }
 
+// mutagenHumanize translates mutagen status jargon into plain English.
+func mutagenHumanize(s string) string {
+	replacer := strings.NewReplacer(
+		"Watching for changes", "ready",
+		"Scanning files", "scanning",
+		"Staging files on alpha", "uploading",
+		"Staging files on beta", "downloading to server",
+		"Reconciling changes", "syncing",
+		"Saving archive", "finalizing",
+		"Halted", "halted",
+	)
+	return replacer.Replace(s)
+}
+
 func loadMutagenCmd() tea.Cmd {
 	return func() tea.Msg {
 		if _, err := exec.LookPath("mutagen"); err != nil {
@@ -935,7 +954,9 @@ func loadMutagenCmd() tea.Cmd {
 			}
 			// Strip "fusebox-" prefix from name
 			line = strings.TrimPrefix(line, "fusebox-")
-			if strings.Contains(line, "Error") || strings.Contains(line, "Halted") {
+			// Translate mutagen jargon into plain English
+			line = mutagenHumanize(line)
+			if strings.Contains(line, "error") || strings.Contains(line, "halted") {
 				hasError = true
 			}
 			summary = append(summary, line)

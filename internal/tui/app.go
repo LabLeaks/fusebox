@@ -915,55 +915,35 @@ func loadMutagenCmd() tea.Cmd {
 		if _, err := exec.LookPath("mutagen"); err != nil {
 			return mutagenStatusMsg{} // not installed, skip silently
 		}
-		out, err := exec.Command("mutagen", "sync", "list", "--label-selector", "fusebox=true").Output()
+		out, err := exec.Command("mutagen", "sync", "list",
+			"--label-selector", "fusebox=true",
+			"--template", `{{range .}}{{.Name}}: {{.Status.Description}}{{"\n"}}{{end}}`).Output()
 		if err != nil {
 			return mutagenStatusMsg{err: err}
 		}
-		output := string(out)
-		if strings.TrimSpace(output) == "" {
+		output := strings.TrimSpace(string(out))
+		if output == "" {
 			return mutagenStatusMsg{}
 		}
 
-		// Parse per-session status
 		var summary []string
-		hasStaging := false
 		hasError := false
-		name := ""
 		for _, line := range strings.Split(output, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "Name:") {
-				name = strings.TrimPrefix(strings.TrimPrefix(trimmed, "Name:"), " fusebox-")
-				name = strings.TrimSpace(name)
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
 			}
-			if strings.HasPrefix(trimmed, "Status:") {
-				status := strings.TrimSpace(strings.TrimPrefix(trimmed, "Status:"))
-				short := status
-				if strings.Contains(status, "Watching") {
-					short = "synced"
-				} else if strings.Contains(status, "Staging") || strings.Contains(status, "Reconciling") {
-					short = "syncing"
-					hasStaging = true
-				} else if strings.Contains(status, "Error") || strings.Contains(status, "Halted") {
-					short = "error"
-					hasError = true
-				}
-				if name != "" {
-					summary = append(summary, name+": "+short)
-					name = ""
-				}
+			// Strip "fusebox-" prefix from name
+			line = strings.TrimPrefix(line, "fusebox-")
+			if strings.Contains(line, "Error") || strings.Contains(line, "Halted") {
+				hasError = true
 			}
-		}
-
-		if len(summary) == 0 {
-			return mutagenStatusMsg{status: "ok"}
+			summary = append(summary, line)
 		}
 
 		result := strings.Join(summary, " · ")
 		if hasError {
 			return mutagenStatusMsg{status: result, err: fmt.Errorf("sync error")}
-		}
-		if hasStaging {
-			return mutagenStatusMsg{status: result}
 		}
 		return mutagenStatusMsg{status: result}
 	}

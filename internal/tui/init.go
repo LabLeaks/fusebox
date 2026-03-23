@@ -236,7 +236,9 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.step != stepDirs {
 			// Initial discovery — browse local dirs (what to sync from your Mac)
 			localHome, _ := os.UserHomeDir()
+			savedMax := m.browser.maxVisible
 			m.browser = newDirBrowser(localHome)
+			m.browser.maxVisible = savedMax
 			m.browser.SetRootEntries(entries)
 		}
 		m.browser.SetEntries(entries)

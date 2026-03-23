@@ -10,14 +10,12 @@ import (
 
 // defaultIgnores lists patterns mutagen should skip when syncing.
 var defaultIgnores = []string{
-	".git",
 	"node_modules",
 	"vendor",
 	"__pycache__",
 	".venv",
 	"venv",
 	".next",
-	"dist",
 	".cache",
 	"target",
 	".DS_Store",

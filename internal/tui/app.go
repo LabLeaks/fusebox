@@ -921,7 +921,7 @@ func mutagenHumanize(s string) string {
 		"Watching for changes", "ready",
 		"Scanning files", "scanning",
 		"Staging files on alpha", "uploading",
-		"Staging files on beta", "downloading to server",
+		"Staging files on beta", "uploading to server",
 		"Reconciling changes", "syncing",
 		"Saving archive", "finalizing",
 		"Halted", "halted",

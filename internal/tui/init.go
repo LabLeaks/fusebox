@@ -205,9 +205,10 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.connectSub = subDiscover
 		m.progress = "Binary deployed · Detecting sandbox support..."
+		localHome, _ := os.UserHomeDir()
 		return m, tea.Batch(
 			detectSandboxCmd(m.host, m.user, m.sshFactory),
-			discoverDirsCmd(m.host, m.user, m.homeDir, m.sshFactory),
+			discoverLocalDirsCmd(localHome),
 		)
 
 	case sandboxDetectedMsg:
@@ -229,8 +230,9 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			entries = append(entries, dirBrowserEntry{name: d.path, count: d.count})
 		}
 		if m.step != stepDirs {
-			// Initial discovery — set up the browser
-			m.browser = newDirBrowser(m.homeDir)
+			// Initial discovery — browse local dirs (what to sync from your Mac)
+			localHome, _ := os.UserHomeDir()
+			m.browser = newDirBrowser(localHome)
 			m.browser.SetRootEntries(entries)
 		}
 		m.browser.SetEntries(entries)
@@ -421,16 +423,10 @@ func (m InitModel) updateDirs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.step = stepSettings
 		return m, nil
 	case dirBrowserDrillIn:
-		if m.localMode {
-			return m, discoverLocalDirsCmd(m.browser.absPath)
-		}
-		return m, discoverDirsCmd(m.host, m.user, m.browser.absPath, m.sshFactory)
+		return m, discoverLocalDirsCmd(m.browser.absPath)
 	case dirBrowserDrillUp:
 		if m.browser.scanning {
-			if m.localMode {
-				return m, discoverLocalDirsCmd(m.browser.absPath)
-			}
-			return m, discoverDirsCmd(m.host, m.user, m.browser.absPath, m.sshFactory)
+			return m, discoverLocalDirsCmd(m.browser.absPath)
 		}
 		return m, nil
 	}

@@ -137,38 +137,6 @@ func deployCmd(host, user, goarch, homeDir string, factory func(host, user strin
 	}
 }
 
-// discoverDirsCmd lists non-hidden subdirectories at scanPath (absolute) on the server.
-func discoverDirsCmd(host, user, scanPath string, factory func(host, user string) ssh.Runner) tea.Cmd {
-	return func() tea.Msg {
-		runner := factory(host, user)
-		cmd := fmt.Sprintf(
-			`for d in %s/*/; do [ -d "$d" ] && name=$(basename "$d") && case "$name" in .*) continue;; esac && count=$(find "$d" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l) && echo "$name $count"; done`,
-			scanPath,
-		)
-		out, err := runner.Run(cmd)
-		if err != nil {
-			return dirsFoundMsg{err: fmt.Errorf("failed to list directories: %w", err)}
-		}
-
-		var dirs []dirEntry
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			parts := strings.SplitN(line, " ", 2)
-			name := parts[0]
-			count := 0
-			if len(parts) == 2 {
-				fmt.Sscanf(parts[1], "%d", &count)
-			}
-			dirs = append(dirs, dirEntry{path: name, count: count})
-		}
-
-		return dirsFoundMsg{dirs: dirs}
-	}
-}
-
 // detectSandboxCmd checks if the server supports namespace isolation.
 func detectSandboxCmd(host, user string, factory func(host, user string) ssh.Runner) tea.Cmd {
 	return func() tea.Msg {
@@ -213,9 +181,10 @@ func detectSandboxCmd(host, user string, factory func(host, user string) ssh.Run
 }
 
 // writeConfigCmd writes the config file and roots.conf on the server.
+// roots are relative paths from the local home (e.g. "work/lableaks").
 func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool, factory func(host, user string) ssh.Runner) tea.Cmd {
 	return func() tea.Msg {
-		// Build browse_roots with ~ prefix
+		// Browse roots use ~ prefix (local paths for fusebox sync add)
 		browseRoots := make([]string, len(roots))
 		for i, r := range roots {
 			browseRoots[i] = "~/" + r
@@ -234,11 +203,13 @@ func writeConfigCmd(host, user, homeDir string, roots []string, passthrough bool
 
 		runner := factory(host, user)
 
-		// Write roots.conf on server
+		// Write roots.conf on server — point to sync destinations
+		// Synced folders land at ~/.fusebox/sync/<basename>/
 		if len(roots) > 0 {
 			var serverRoots []string
 			for _, r := range roots {
-				serverRoots = append(serverRoots, homeDir+"/"+r)
+				base := filepath.Base(r)
+				serverRoots = append(serverRoots, homeDir+"/.fusebox/sync/"+base)
 			}
 			rootsContent := strings.Join(serverRoots, "\n")
 			cmd := fmt.Sprintf("cat > ~/.config/fusebox/roots.conf << 'ROOTSEOF'\n%s\nROOTSEOF", rootsContent)

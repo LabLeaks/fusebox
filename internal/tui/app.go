@@ -260,7 +260,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if len(msg.dirs) == 0 {
-			m.dashboard.err = fmt.Errorf("no folders on server yet — mutagen is still syncing. Wait for sync to complete and try again")
+			m.dashboard.err = fmt.Errorf("no folders on server yet — files are still syncing. Check sync status at the bottom of the dashboard")
 			m.view = viewDashboard
 			return m, nil
 		}

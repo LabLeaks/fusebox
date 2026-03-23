@@ -315,8 +315,9 @@ func (m InitModel) updateMode(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.localMode = true
 			home, _ := os.UserHomeDir()
 			m.homeDir = home
-			m.browser = newDirBrowser(home)
-			m.step = stepDirs
+			m.progress = "Scanning directories..."
+			// Stay at stepMode — dirsFoundMsg handler will set up the browser
+			// and transition to stepDirs with root entries properly set.
 			return m, discoverLocalDirsCmd(home)
 		case "r":
 			m.step = stepHost
@@ -485,7 +486,7 @@ func (m InitModel) View() tea.View {
 	b.WriteString("\n\n")
 
 	// Step indicators
-	if m.localMode {
+	if m.localMode && m.step >= stepMode {
 		b.WriteString(stepDoneStyle.Render("  ✓ Mode         local"))
 		b.WriteString("\n")
 	} else if m.step > stepMode {
@@ -507,9 +508,14 @@ func (m InitModel) View() tea.View {
 	// Active step content
 	switch m.step {
 	case stepMode:
-		b.WriteString("  How do you want to run fusebox?\n\n")
-		b.WriteString("  [l]  Local — run Claude sessions on this Mac\n")
-		b.WriteString("  [r]  Remote — deploy to a server\n")
+		if m.localMode {
+			// Waiting for local directory scan
+			b.WriteString(fmt.Sprintf("  %s %s\n", m.spinner.View(), m.progress))
+		} else {
+			b.WriteString("  How do you want to run fusebox?\n\n")
+			b.WriteString("  [l]  Local — run Claude sessions on this Mac\n")
+			b.WriteString("  [r]  Remote — deploy to a server\n")
+		}
 	case stepHost:
 		if m.err != nil {
 			b.WriteString(stepErrStyle.Render(fmt.Sprintf("  Error: %v", m.err)))

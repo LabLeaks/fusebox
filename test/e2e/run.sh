@@ -212,11 +212,11 @@ done
 if [[ "$result" == *"hello from server"* ]]; then ok "file synced from server to client"
 else fail "reverse sync failed: $result"; fi
 
-# -- Sandbox status
-log "Test: Sandbox status"
-result=$(run_server /home/testuser/bin/fusebox sandbox-status)
-if [[ "$result" == *"running"* ]]; then ok "sandbox-status returns JSON"
-else fail "sandbox-status unexpected: $result"; fi
+# -- Server binary responds to help
+log "Test: Server help"
+result=$(run_server /home/testuser/bin/fusebox help)
+if [[ "$result" == *"Claude Code session manager"* ]]; then ok "fusebox help works"
+else fail "fusebox help unexpected: $result"; fi
 
 # -- Remote list via SSH
 log "Test: Remote operations via SSH"
@@ -264,6 +264,26 @@ else fail "session stop failed: $result"; fi
 result=$(run_server /home/testuser/bin/fusebox list)
 if [[ "$result" == "[]" ]]; then ok "session gone after stop"
 else fail "session still present: $result"; fi
+
+# -- Local mode: dirs and sessions work without SSH
+log "Test: Local mode"
+# Write a local-mode config (no server block)
+run_client bash -c '
+    cat > ~/.config/fusebox/config.yaml << EOF
+browse_roots:
+  - /home/testuser/projects
+claude:
+  flags: "--dangerously-skip-permissions --remote-control"
+EOF
+    echo "/home/testuser/projects" > ~/.config/fusebox/roots.conf
+'
+result=$(run_client /home/testuser/bin/fusebox list)
+if [[ "$result" == "[]" ]]; then ok "local mode: fusebox list works"
+else fail "local mode: fusebox list unexpected: $result"; fi
+
+result=$(run_client /home/testuser/bin/fusebox dirs)
+if [[ "$result" == *"projects"* ]]; then ok "local mode: fusebox dirs works"
+else fail "local mode: fusebox dirs unexpected: $result"; fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 

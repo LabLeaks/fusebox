@@ -1,0 +1,32 @@
+version: 1
+
+sync:
+  ignore:
+    - "DerivedData/"
+    - "node_modules/"
+    - ".git/"
+
+actions:
+  build:
+    description: "Build the project"
+    exec: "make build"
+
+  test:
+    description: "Run tests for a specific package"
+    exec: "go test ./{package}/..."
+    timeout: 300
+    params:
+      package:
+        type: regex
+        pattern: "^[a-zA-Z0-9_/]+$"
+
+  deploy:
+    description: "Deploy to an environment"
+    exec: "deploy --env {env} --replicas {replicas}"
+    params:
+      env:
+        type: enum
+        values: ["staging", "production"]
+      replicas:
+        type: int
+        range: [1, 10]

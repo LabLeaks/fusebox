@@ -1,0 +1,41 @@
+version: 1
+
+actions:
+  bad_action:
+    description: "Missing exec field"
+
+  bad_param_type:
+    description: "Unknown param type"
+    exec: "echo {x}"
+    params:
+      x:
+        type: unknown
+
+  bad_enum:
+    description: "Enum with no values"
+    exec: "echo {x}"
+    params:
+      x:
+        type: enum
+
+  bad_regex:
+    description: "Regex with no pattern"
+    exec: "echo {x}"
+    params:
+      x:
+        type: regex
+
+  bad_int:
+    description: "Int with no range"
+    exec: "echo {x}"
+    params:
+      x:
+        type: int
+
+  bad_range:
+    description: "Int with inverted range"
+    exec: "echo {x}"
+    params:
+      x:
+        type: int
+        range: [10, 1]

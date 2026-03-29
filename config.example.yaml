@@ -1,0 +1,54 @@
+# ~/.fusebox/config — Global Fusebox configuration
+#
+# This file stores your server connection details, auth token, and default
+# preferences. It applies to all Fusebox sessions across all projects.
+#
+# Copy this file to ~/.fusebox/config and fill in your values.
+# Alternatively, run `fusebox init` to generate it interactively.
+
+# ---------------------------------------------------------------------------
+# Remote server
+# ---------------------------------------------------------------------------
+# Your BYO Linux server. Fusebox connects via SSH, provisions a Sysbox
+# container per project, and syncs files with Mutagen.
+#
+# Requirements:
+#   - SSH key-based auth (no password auth)
+#   - Docker + Sysbox installed (run `fusebox setup` to install both)
+#   - Debian 13+ or Ubuntu 24.04+ recommended
+
+server:
+  host: "your-server.example.com"  # hostname, IP, or Tailscale name
+  user: "root"                     # SSH user (must have Docker access)
+  port: 22                         # SSH port
+
+# ---------------------------------------------------------------------------
+# Auth token
+# ---------------------------------------------------------------------------
+# Claude Code session token, injected into remote containers as an env var.
+# Run `fusebox auth` to set this — it handles the `claude setup-token` flow
+# and stores the result here. Do not paste tokens manually.
+
+token: ""  # managed by `fusebox auth` — do not edit by hand
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+# Override default behavior for all sessions. These can be further overridden
+# per-project in fusebox.yaml if needed.
+
+defaults:
+  # Container image used for new sessions. Must have Claude Code, mosh-server,
+  # and the fusebox remote binary pre-installed.
+  image: "fusebox/claude:latest"
+
+  # Shell launched inside the container for interactive mosh sessions.
+  shell: "/bin/bash"
+
+  # Maximum time (seconds) to wait for Mutagen sync to reach "Watching"
+  # state before executing an action. Prevents stale-code builds.
+  sync_timeout: 30
+
+  # RPC backchannel port on the remote side (SSH reverse tunnel).
+  # Change only if the default conflicts with another service.
+  rpc_port: 7600

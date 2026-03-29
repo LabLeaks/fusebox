@@ -1,0 +1,216 @@
+# fusebox.yaml — Local action whitelist for Fusebox
+#
+# This file defines what the remote AI agent is allowed to trigger on your
+# local machine. It lives in your project root and is NEVER synced to the
+# remote server (the agent cannot modify its own permissions).
+#
+# The agent discovers available actions via `fusebox actions` (CLI) or MCP
+# tools on the remote side. Descriptions are agent-facing — write them so
+# the agent knows when and how to use each action.
+#
+# Copy this file to your project root as `fusebox.yaml` and customize.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# Sync ignore patterns
+# ---------------------------------------------------------------------------
+# These are passed to Mutagen. Directories/files matching these patterns are
+# excluded from source-only sync between local and remote. Keep this list
+# tight — large ignored trees (build artifacts, caches) dramatically speed
+# up sync and reduce disk usage on the remote server.
+
+sync:
+  ignore:
+    # --- iOS / macOS ---
+    - "DerivedData/"
+    - "*.xcuserdata/"
+    - "Pods/"               # if using CocoaPods (SPM preferred)
+    - ".build/"             # Swift Package Manager
+
+    # --- Python / ML ---
+    - "__pycache__/"
+    - "*.egg-info/"
+    - ".venv/"
+    - "venv/"
+    - "wandb/"              # Weights & Biases local logs
+    - "checkpoints/"        # model checkpoints stay local
+
+    # --- Node ---
+    - "node_modules/"
+    - ".next/"
+    - "dist/"
+
+    # --- Rust ---
+    - "target/"
+
+    # --- General ---
+    - ".git/"               # git is orthogonal — never sync .git
+    - "*.o"
+    - "*.so"
+    - "*.dylib"
+
+# ---------------------------------------------------------------------------
+# Actions
+# ---------------------------------------------------------------------------
+# Each action is a named command the agent can invoke via RPC. Parameters
+# use {param_name} substitution and are validated before execution.
+#
+# Parameter types:
+#   regex  — value must match the given pattern
+#   enum   — value must be one of the listed options
+#   int    — integer within an inclusive [min, max] range
+
+actions:
+
+  # =========================================================================
+  # iOS Development
+  # =========================================================================
+
+  build_ios:
+    description: "Build iOS app for the simulator. Returns compiler output."
+    exec: "xcodebuild -workspace App.xcworkspace -scheme {scheme} -sdk iphonesimulator -destination 'platform=iOS Simulator,name={device}' build"
+    params:
+      scheme:
+        type: enum
+        values: ["App", "AppTests", "AppUITests"]
+      device:
+        type: enum
+        values: ["iPhone 16 Pro", "iPhone 16", "iPad Pro 13-inch (M4)"]
+
+  run_ios_tests:
+    description: "Run a specific iOS test class on the simulator."
+    exec: "xcodebuild test -workspace App.xcworkspace -scheme App -sdk iphonesimulator -only-testing:AppTests/{test_class}"
+    params:
+      test_class:
+        type: regex
+        pattern: "^[a-zA-Z][a-zA-Z0-9_]*Tests$"
+
+  boot_simulator:
+    description: "Boot an iOS simulator by device name. Idempotent — no-ops if already booted."
+    exec: "xcrun simctl boot '{device}'"
+    params:
+      device:
+        type: enum
+        values: ["iPhone 16 Pro", "iPhone 16", "iPad Pro 13-inch (M4)"]
+
+  # =========================================================================
+  # GPU Training (PyTorch)
+  # =========================================================================
+
+  train:
+    description: "Run PyTorch training on local GPU. Streams metrics to stdout."
+    exec: "python train.py --epochs {epochs} --lr {lr} --batch-size {batch_size}"
+    params:
+      epochs:
+        type: int
+        range: [1, 1000]
+      lr:
+        type: regex
+        pattern: "^0\\.[0-9]{1,6}$"
+      batch_size:
+        type: enum
+        values: ["8", "16", "32", "64", "128", "256"]
+
+  evaluate_model:
+    description: "Evaluate a saved checkpoint against the test set."
+    exec: "python evaluate.py --checkpoint {checkpoint}"
+    params:
+      checkpoint:
+        type: regex
+        pattern: "^checkpoints/[a-zA-Z0-9_\\-]+\\.pt$"
+
+  gpu_status:
+    description: "Show GPU utilization and memory. No parameters."
+    exec: "nvidia-smi"
+
+  # =========================================================================
+  # Pre-Authed CLI Tools (zero credential sprawl)
+  # =========================================================================
+  # These use your local machine's existing authenticated sessions.
+  # Credentials never leave your machine. The agent sends structured
+  # intents; the local daemon executes with your ambient auth.
+
+  gh_pr_create:
+    description: "Create a GitHub pull request from the current branch."
+    exec: "gh pr create --title '{title}' --body '{body}' --base {base}"
+    params:
+      title:
+        type: regex
+        pattern: "^.{1,120}$"
+      body:
+        type: regex
+        pattern: "^[\\s\\S]{0,4000}$"
+      base:
+        type: regex
+        pattern: "^[a-zA-Z0-9_.\\-/]+$"
+
+  aws_deploy:
+    description: "Deploy a service via AWS ECS. Uses local AWS SSO session."
+    exec: "aws ecs update-service --cluster {cluster} --service {service} --force-new-deployment"
+    params:
+      cluster:
+        type: regex
+        pattern: "^[a-zA-Z0-9\\-]+$"
+      service:
+        type: regex
+        pattern: "^[a-zA-Z0-9\\-]+$"
+
+  kubectl_apply:
+    description: "Apply a Kubernetes manifest from the local repo. Uses local kubeconfig."
+    exec: "kubectl apply -f {manifest} --context {context}"
+    params:
+      manifest:
+        type: regex
+        pattern: "^k8s/[a-zA-Z0-9_/\\-]+\\.ya?ml$"
+      context:
+        type: enum
+        values: ["staging", "production"]
+
+  gcloud_deploy:
+    description: "Deploy to Cloud Run. Uses local gcloud auth."
+    exec: "gcloud run deploy {service} --source . --region {region} --project {project}"
+    params:
+      service:
+        type: regex
+        pattern: "^[a-z][a-z0-9\\-]{0,62}$"
+      region:
+        type: enum
+        values: ["us-central1", "us-east1", "europe-west1", "asia-northeast1"]
+      project:
+        type: regex
+        pattern: "^[a-z][a-z0-9\\-]{4,28}[a-z0-9]$"
+
+  # =========================================================================
+  # Embedded / Hardware-in-the-Loop (ESP32)
+  # =========================================================================
+
+  flash_esp32:
+    description: "Flash firmware to ESP32 over USB serial. Returns flash log."
+    exec: "esptool.py --port {port} --baud 460800 write_flash 0x0 {firmware}"
+    params:
+      port:
+        type: enum
+        values: ["/dev/tty.usbserial-0001", "/dev/tty.usbmodem14101"]
+      firmware:
+        type: regex
+        pattern: "^build/[a-zA-Z0-9_\\-]+\\.bin$"
+
+  serial_monitor:
+    description: "Read serial output from ESP32 for 10 seconds. Returns captured log."
+    exec: "timeout 10 screen -L -Logfile /tmp/serial.log {port} {baud}; cat /tmp/serial.log"
+    params:
+      port:
+        type: enum
+        values: ["/dev/tty.usbserial-0001", "/dev/tty.usbmodem14101"]
+      baud:
+        type: enum
+        values: ["9600", "115200", "460800"]
+
+  pio_build:
+    description: "Build PlatformIO project for a specific board environment."
+    exec: "pio run -e {environment}"
+    params:
+      environment:
+        type: enum
+        values: ["esp32dev", "esp32s3", "arduino_nano"]

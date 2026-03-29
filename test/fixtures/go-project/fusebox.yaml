@@ -1,0 +1,29 @@
+version: 1
+
+sync:
+  ignore:
+    - ".git/"
+
+actions:
+  build:
+    description: "Build the Go project"
+    exec: "go build ./..."
+
+  echo:
+    description: "Echo a message with a given prefix"
+    exec: "echo {prefix}: {message}"
+    params:
+      prefix:
+        type: enum
+        values: ["INFO", "WARN", "ERROR"]
+      message:
+        type: regex
+        pattern: "^[a-zA-Z0-9 ]+$"
+
+  count:
+    description: "Count from 1 to N"
+    exec: "seq 1 {n}"
+    params:
+      n:
+        type: int
+        range: [1, 100]

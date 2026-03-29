@@ -1,0 +1,12 @@
+server:
+  host: "spotless-1"
+  user: "root"
+  port: 22
+
+token: "sk-ant-test-token"
+
+defaults:
+  image: "fusebox/claude:latest"
+  shell: "/bin/bash"
+  sync_timeout: 30
+  rpc_port: 7600

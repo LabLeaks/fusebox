@@ -4,7 +4,7 @@
 **Goal:** Build the minimum viable Fusebox: `fusebox up` provisions a Sysbox container on a remote server with Claude Code, syncs source via Mutagen, establishes the RPC bridge, and the agent can trigger whitelisted local actions via `fusebox exec` and MCP tools.
 **Target:** 60-second demo video showing split-screen agent-on-VPS + local Xcode build
 **Started:** 2026-03-29
-**Completed:** 2026-03-28
+**Completed:** 2026-03-29
 
 ---
 
@@ -703,3 +703,232 @@ fusebox/
 | P7.2 Sync-wait integration | Complete | |
 | P8.1 Integration tests | Complete | |
 | P8.2 Cross-compile + demo | Complete | |
+
+---
+
+## Sprint Retrospective
+
+*Compiled from 4 retro agents reviewing the codebase + 1 analyst mining 51 agent conversation logs.*
+
+### What went well
+
+**1. Planning phase produced zero architectural surprises.** PM, UX, and researcher agents ran in parallel. The synthesis doc ranked use cases, flagged the sync-wait race condition, and identified Claude state portability — all before a line of code was written.
+
+**2. Well-designed packages.** Agents consistently praised: validation engine (98% coverage, behavior-tested), config package (clean layering, good resolver), MCP server (correct JSON-RPC 2.0), RPC protocol (simple, debuggable, extensible), sync abstractions (clean `SyncWaiter` interface).
+
+**3. Sysbox discovery.** User pushed back on Docker socket mounting, which led to gVisor research, then Sysbox. Live-tested on spotless-2, verified Docker-inside-Sysbox with working networking. Core differentiator.
+
+**4. Claude state sync emerged from user question.** Would have been a painful post-launch discovery without the user flagging session/memory portability.
+
+**5. Scope cuts were correct.** Removing `fusebox setup`, `fusebox init`, and token encryption saved complexity without losing dogfood-ability.
+
+### What went wrong
+
+**1. Massive duplicate task dispatches (the #1 process failure).** Log analysis found:
+- P1.1 dispatched 7 times, P2.1 dispatched 6 times, P2.3 dispatched 5 times
+- ~30 of 51 agent runs were duplicates or retries of already-assigned work
+- Multiple agents wrote to the same files simultaneously, causing cascading conflicts
+
+**2. The `fusesync` import war.** Most visible collision: one agent added the import for sync-wait, another agent's linter removed it as unused, a third agent re-added it, the linter removed it again. Agents noted: *"The file was modified by another agent"* and *"The linter keeps re-adding gosync..."*
+
+**3. Test engineer was an afterthought.** Not spun up until 15/20 tasks were done. User flagged this directly.
+
+**4. No file-level ownership boundaries.** Agents were told "implement P2.1" but not "you own `internal/ssh/` and nothing else." Test engineer expanded `server_test.go` from ~400 to ~800 lines while another agent was editing `server.go`.
+
+### Bugs found (must fix before sprint 2)
+
+| Bug | Severity | Location |
+|-----|----------|----------|
+| `down --destroy` nil panics — container manager is nil | **P0** | `cmd/fusebox/down.go:49-51` |
+| OAuth token visible in `ps aux` and docker inspect | **P0** | `container/manager.go:63` |
+| Claude state syncs to `/home/root/` instead of `/root/` | **P1** | `sync/claude_state.go:35` |
+| PID file never written but `down.go` tries to read it | **P1** | `orchestrator/up.go` (missing), `orchestrator/down.go:94` |
+| `StatusInfo` / `daemonStatus` mismatch — action-running safety check always returns false | **P1** | `orchestrator/down.go:33` vs `daemon/status.go:13` |
+| SSH agent connection leak — `agentConn` never closed | **P1** | `ssh/client.go:60` |
+| `docker cp` expects remote path but flag description implies local | **P1** | `orchestrator/up.go:122-137` |
+| Executor timeout/kill logic is dead code — `CommandContext` already killed the process | **P2** | `daemon/executor.go:90-101` |
+| `copyDir` skips subdirectories silently | **P2** | `sync/claude_state.go:152` |
+| `actions.go` duplicates RPC client logic instead of using `rpc.Client` | **P2** | `cmd/fusebox/actions.go:47-58` |
+| `EnsureImage` called twice on cold start | **P3** | `orchestrator/up.go:93` + `container/manager.go:55` |
+| `validateGlobalConfig` mutates its argument (side-effecting validation) | **P3** | `config/validation.go:64-79` |
+
+### Architecture concerns
+
+1. **`orchestrator/up.go` is a 325-line procedural blob with no rollback.** If step 11 fails, steps 7-10 leave orphaned Mutagen sessions and a running container. Needs a state machine with `Do()`/`Undo()` methods per step.
+
+2. **Duplicate type hierarchies.** `rpc.ActionInfo` + `rpc.ParamSchema` vs `mcp.ActionDescriptor` + `mcp.ParamDescriptor` — structurally identical, separately maintained.
+
+3. **Single RPC port, no multiplexing.** A 5-minute exec blocks all other RPC calls on that connection. Sprint 2 concurrent operations will need multiplexing.
+
+4. **No tunnel reconnection.** SSH tunnel drops are unrecoverable. Laptop sleep = everything dies.
+
+5. **Mutagen CLI string parsing is fragile.** `parseStatus` matches `Status:` prefix in human-readable output. Version upgrades could silently break it.
+
+6. **No `context.Context` usage.** Everything is blocking with no cancellation. Hung SSH = hung process forever.
+
+7. **`WaitForSyncWithLog` swallows errors.** Returns nil on timeout, meaning builds silently run against stale code.
+
+### Test quality assessment
+
+**Strong (80%+):** validation (98%), config (89%), mcp (88%), daemon (84%), sync (83%)
+**Weak (<25%):** container (21%), orchestrator (21%), ssh (10%), cmd (0%)
+
+**Key test issues:**
+- `TestLastAction` uses `time.Sleep(10ms)` — race condition
+- `WaitForSync` timeout test uses `1ms` — timing-dependent
+- `json.Unmarshal` errors unchecked in 8+ daemon test calls
+- `ValidateSecret("", "")` returns true — security concern
+- `orchestrator/up_test.go` tests constants equal their own values — not real tests
+- No MCP-to-daemon end-to-end integration test
+
+### Process action items for sprint 2
+
+1. **Never dispatch the same task to multiple agents.** Track dispatched task IDs. The 7x dispatch of P1.1 wasted the most compute.
+2. **Assign file ownership per agent.** "You own `internal/ssh/**`. Do not modify files outside these paths."
+3. **Serialize tasks that touch the same package.** Don't run P7.1 and P7.2 in parallel — they touch the same files.
+4. **Run build check between agent waves.** The linter and agents fought over imports because both ran concurrently.
+5. **Test engineer runs in parallel with developer** from task 1, not as a cleanup pass.
+6. **Idle agents do test/doc/review work** — don't let them sit.
+
+### Stats — Iteration 1
+
+| Metric | Value |
+|--------|-------|
+| Go source files | 57 |
+| Lines of Go | 9,169 |
+| Tests | 258 |
+| Total files committed | 77 |
+| Total lines committed | 12,237 |
+| Tasks completed | 22/22 |
+| Agent runs (from logs) | 51 |
+| Duplicate/wasted agent runs | ~30 (59%) |
+| Bugs found in retro | 12 |
+| Code reviews performed | 0 |
+| QA passes performed | 0 |
+
+---
+
+## Iteration 2: Bugfix Pass
+
+*Sprint was hard-rejected by stakeholder after retro found 12 bugs, 2 P0. "Quality is not negotiable."*
+
+### What changed in iteration 2
+
+**Process changes applied:**
+- Strict file ownership per agent ("you own `internal/ssh/**` and nothing else")
+- Three-phase pipeline: devs + test-eng in parallel → code review → QA
+- Test engineer launched simultaneously with developers (not after)
+- Two code reviewers reviewed every package before QA
+- QA gate before marking complete
+
+**Execution:**
+- 4 dev agents, 1 test engineer, 2 reviewers, 1 QA — clean three-phase pipeline
+- Total wall-clock: ~17 minutes from first dispatch to QA pass
+- All 12 retro bugs fixed + 5 additional code review findings fixed
+- +1,051 lines added, -158 lines removed across 24 files
+- ~600 lines of new tests added
+
+### What worked in iteration 2
+
+**1. File ownership prevented conflicts.** Zero merge conflicts, zero import wars. Every agent's Edit calls stayed within assigned boundaries. When dev-4 found bug #33 lived in `orchestrator/up.go` (dev-2's file), they messaged the team lead with the exact diagnosis instead of reaching across: *"I don't own orchestrator/up.go, so whoever owns that file should remove lines 91-97."*
+
+**2. Test engineer was genuinely parallel.** Test-eng started ~1 minute after devs, worked simultaneously on flaky tests and coverage gaps while devs fixed bugs. Finished slightly after devs. No coordination conflicts because test-eng owned `*_test.go` files and devs owned source files.
+
+**3. Code reviewers caught real issues.** Reviewers found 5 additional problems the retro had missed:
+- SIGKILL timer not cancelled after process exits (PID reuse risk)
+- `InsecureIgnoreHostKey` in SSH client (MITM risk)
+- Regex patterns not validated at config load time
+- Secret written unquoted into shell command
+- Secret file missing chmod 600
+
+**4. QA provided a clean gate.** Full build verification, test suite, `go vet`, CLI help output, config parsing, gitignore coverage. Caught nothing new — which is the point: review should find issues, QA should confirm they're fixed.
+
+**5. Zero build/test failures during development.** Every agent's `go test` passed on first run. Agents read code carefully before editing and got changes right the first time. Contrast with iteration 1's cascading import wars.
+
+### What still went wrong
+
+**1. Duplicate dispatches persisted.** Every agent role was spawned twice (a + b variant) with identical messages at the same timestamp. 9 unique work units dispatched as 17 agents — nearly 2x compute waste. Appears to be a platform-level issue, not team lead coordination. Both instances produced byte-identical edits (safe by coincidence — identical edits are idempotent).
+
+**2. Dev-2 triple-dispatched.** Initial dispatch + follow-up for bug #33 + that follow-up duplicated = 3 instances editing the same files.
+
+### Code review results
+
+| Package | Reviewer | Verdict | Issues found |
+|---------|----------|---------|-------------|
+| config | reviewer-core | Clean | Regex patterns not pre-compiled (fixed) |
+| rpc | reviewer-core | Clean | Scanner max line size undocumented (noted) |
+| validation | reviewer-core | Clean | ReDoS possible with bad user-written regex (accepted risk) |
+| ssh | reviewer-infra | 1 bug | InsecureIgnoreHostKey (fixed — now uses known_hosts) |
+| container | reviewer-infra | Clean post-fix | Token injection via docker exec verified correct |
+| daemon | reviewer-infra | 1 bug | SIGKILL timer not cancelled (fixed) |
+| mcp | reviewer-infra | Clean | Minor: writeResponse silently drops marshal errors (noted) |
+| orchestrator | reviewer-infra | 2 bugs | Secret unquoted + missing chmod (both fixed) |
+
+### QA results
+
+All green: both binaries build (static), 10/10 test packages pass, go vet clean, all CLI commands have meaningful help, config parsing correct, 1 acceptable TODO for sprint 2.
+
+### Stats — Iteration 2
+
+| Metric | Value |
+|--------|-------|
+| Files changed | 24 |
+| Lines added | 1,051 |
+| Lines removed | 158 |
+| New tests added | ~600 lines |
+| Bugs fixed | 12 (retro) + 5 (review) = 17 |
+| Agent dispatches | 17 (9 unique, 8 duplicates) |
+| Code reviews | 2 (every package reviewed) |
+| QA passes | 1 (full verification) |
+| Build/test failures during dev | 0 |
+| Wall-clock time | ~17 minutes |
+
+---
+
+## Meta-Learnings: Agentic Development Process
+
+*Synthesized from both iterations by a comparative analysis agent.*
+
+### The headline
+
+**Agentic parallelism without coordination is worse than serial execution.** Iteration 1 used 51 agent runs with 59% waste and produced 12 bugs. Iteration 2 used 17 agent runs (9 unique) with a three-phase pipeline and produced 0 known bugs. The overhead of coordination (file locking, task tracking, review gates) is less than the cost of not coordinating.
+
+### When parallelism helps vs hurts
+
+**Helps:** Planning phase (PM, UX, Researcher). Independent packages with no shared files. Test-eng parallel with dev (different file types). Retro analysis (multiple perspectives).
+
+**Hurts:** When agents share files. The `fusesync` import war is the canonical example. If two tasks touch the same file, serialize them.
+
+**The rule:** Parallelize at the package boundary, never within a package.
+
+### What "done" means
+
+Iteration 1's definition: `go build` passes + `go test` passes + task marked Complete.
+Reality: 12 bugs including 2 P0s. "Tests pass" is meaningless if the tests are fake.
+
+**Actual definition of done:**
+1. Implementation compiles and passes tests
+2. Code reviewer has approved (not the author)
+3. New tests cover changed behavior (written in parallel)
+4. QA has verified full build + test on clean state
+5. No P0/P1 issues identified in review
+
+This is what CLAUDE.md already said. The failure was enforcement, not definition.
+
+### The process that works
+
+```
+Phase 1: Dev + Test-eng (parallel, strict file ownership)
+Phase 2: Code Review (different agent, reads every file in assigned packages)
+Phase 3: QA (full build + test + CLI verification)
+```
+
+Between phases: `go build && go test ./...` to catch conflicts.
+
+### Rules to enforce mechanically
+
+1. **One agent per file at a time.** Prevents import wars and merge conflicts.
+2. **No task dispatched twice.** Maintain a dispatched set. Check before sending.
+3. **Build check between waves.** Verify clean state before next phase.
+4. **Review gate before Complete.** No self-approval. Different agent must review.
+5. **Never skip defined process steps.** If the process says 7 roles, instantiate 7 roles. If that's too heavy, change the process — don't silently skip it.

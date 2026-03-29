@@ -245,6 +245,88 @@ func TestLoadGlobalConfigMissingFile(t *testing.T) {
 	}
 }
 
+func TestValidateGlobalConfigDoesNotMutate(t *testing.T) {
+	cfg := &GlobalConfig{
+		Server: ServerConfig{Host: "example.com", User: "deploy"},
+	}
+
+	err := validateGlobalConfig(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// validateGlobalConfig should NOT apply defaults
+	if cfg.Server.Port != 0 {
+		t.Errorf("port = %d after validate, want 0 (unmutated)", cfg.Server.Port)
+	}
+	if cfg.Defaults.Image != "" {
+		t.Errorf("image = %q after validate, want empty", cfg.Defaults.Image)
+	}
+	if cfg.Defaults.Shell != "" {
+		t.Errorf("shell = %q after validate, want empty", cfg.Defaults.Shell)
+	}
+	if cfg.Defaults.SyncTimeout != 0 {
+		t.Errorf("sync_timeout = %d after validate, want 0", cfg.Defaults.SyncTimeout)
+	}
+	if cfg.Defaults.RPCPort != 0 {
+		t.Errorf("rpc_port = %d after validate, want 0", cfg.Defaults.RPCPort)
+	}
+}
+
+func TestApplyGlobalDefaults(t *testing.T) {
+	cfg := &GlobalConfig{
+		Server: ServerConfig{Host: "example.com", User: "deploy"},
+	}
+
+	applyGlobalDefaults(cfg)
+
+	if cfg.Server.Port != 22 {
+		t.Errorf("port = %d, want 22", cfg.Server.Port)
+	}
+	if cfg.Defaults.Image != "fusebox/claude:latest" {
+		t.Errorf("image = %q, want fusebox/claude:latest", cfg.Defaults.Image)
+	}
+	if cfg.Defaults.Shell != "/bin/bash" {
+		t.Errorf("shell = %q, want /bin/bash", cfg.Defaults.Shell)
+	}
+	if cfg.Defaults.SyncTimeout != 30 {
+		t.Errorf("sync_timeout = %d, want 30", cfg.Defaults.SyncTimeout)
+	}
+	if cfg.Defaults.RPCPort != 7600 {
+		t.Errorf("rpc_port = %d, want 7600", cfg.Defaults.RPCPort)
+	}
+}
+
+func TestApplyGlobalDefaultsPreservesExplicitValues(t *testing.T) {
+	cfg := &GlobalConfig{
+		Server: ServerConfig{Host: "example.com", User: "deploy", Port: 2222},
+		Defaults: DefaultsConfig{
+			Image:       "custom:v1",
+			Shell:       "/bin/zsh",
+			SyncTimeout: 60,
+			RPCPort:     8080,
+		},
+	}
+
+	applyGlobalDefaults(cfg)
+
+	if cfg.Server.Port != 2222 {
+		t.Errorf("port = %d, want 2222 (preserved)", cfg.Server.Port)
+	}
+	if cfg.Defaults.Image != "custom:v1" {
+		t.Errorf("image = %q, want custom:v1 (preserved)", cfg.Defaults.Image)
+	}
+	if cfg.Defaults.Shell != "/bin/zsh" {
+		t.Errorf("shell = %q, want /bin/zsh (preserved)", cfg.Defaults.Shell)
+	}
+	if cfg.Defaults.SyncTimeout != 60 {
+		t.Errorf("sync_timeout = %d, want 60 (preserved)", cfg.Defaults.SyncTimeout)
+	}
+	if cfg.Defaults.RPCPort != 8080 {
+		t.Errorf("rpc_port = %d, want 8080 (preserved)", cfg.Defaults.RPCPort)
+	}
+}
+
 // --- Roundtrip: parse the example files ---
 
 func TestParseExampleFuseboxYAML(t *testing.T) {

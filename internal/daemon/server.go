@@ -30,8 +30,9 @@ type Server struct {
 	sessionName string
 	syncTimeout time.Duration
 
-	mu         sync.Mutex
-	lastAction *LastAction
+	mu            sync.Mutex
+	lastAction    *LastAction
+	actionRunning bool
 }
 
 // LastAction records the most recent RPC action for status reporting.
@@ -107,6 +108,13 @@ func (s *Server) GetLastAction() *LastAction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastAction
+}
+
+// IsActionRunning returns whether an action is currently executing.
+func (s *Server) IsActionRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.actionRunning
 }
 
 func (s *Server) handleConn(conn net.Conn) {
@@ -204,6 +212,11 @@ func (s *Server) handleExec(req rpc.ExecRequest, enc *rpc.Encoder) {
 		timeout = action.Timeout
 	}
 
+	// Mark action as running
+	s.mu.Lock()
+	s.actionRunning = true
+	s.mu.Unlock()
+
 	// Execute
 	result := Execute(ExecConfig{
 		Command:    expanded,
@@ -213,8 +226,9 @@ func (s *Server) handleExec(req rpc.ExecRequest, enc *rpc.Encoder) {
 		Encoder:    enc,
 	})
 
-	// Record last action
+	// Record last action and clear running state
 	s.mu.Lock()
+	s.actionRunning = false
 	s.lastAction = &LastAction{
 		Name:      req.Action,
 		ExitCode:  result.ExitCode,

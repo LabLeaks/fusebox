@@ -83,11 +83,15 @@ func TestExecAction(t *testing.T) {
 		switch msgType {
 		case rpc.TypeStdout:
 			var msg rpc.StdoutMessage
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal stdout: %v", err)
+			}
 			lines = append(lines, msg.Line)
 		case rpc.TypeExit:
 			var msg rpc.ExitMessage
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal exit: %v", err)
+			}
 			if msg.Code != 0 {
 				t.Errorf("exit code = %d, want 0", msg.Code)
 			}
@@ -97,7 +101,9 @@ func TestExecAction(t *testing.T) {
 			goto done
 		case rpc.TypeError:
 			var msg rpc.ErrorResponse
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal error: %v", err)
+			}
 			t.Fatalf("unexpected error: %s: %s", msg.Code, msg.Message)
 		default:
 			// stderr or other, continue
@@ -137,13 +143,17 @@ func TestExecWithParams(t *testing.T) {
 		switch msgType {
 		case rpc.TypeStdout:
 			var msg rpc.StdoutMessage
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal stdout: %v", err)
+			}
 			lines = append(lines, msg.Line)
 		case rpc.TypeExit:
 			goto done
 		case rpc.TypeError:
 			var msg rpc.ErrorResponse
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal error: %v", err)
+			}
 			t.Fatalf("unexpected error: %s: %s", msg.Code, msg.Message)
 		}
 	}
@@ -174,7 +184,9 @@ func TestExecNonZeroExit(t *testing.T) {
 		}
 		if msgType == rpc.TypeExit {
 			var msg rpc.ExitMessage
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal exit: %v", err)
+			}
 			if msg.Code != 42 {
 				t.Errorf("exit code = %d, want 42", msg.Code)
 			}
@@ -206,7 +218,9 @@ func TestExecInvalidAction(t *testing.T) {
 	}
 
 	var errMsg rpc.ErrorResponse
-	json.Unmarshal(raw, &errMsg)
+	if err := json.Unmarshal(raw, &errMsg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errMsg.Code != "INVALID_ACTION" {
 		t.Errorf("error code = %q, want %q", errMsg.Code, "INVALID_ACTION")
 	}
@@ -236,7 +250,9 @@ func TestExecInvalidParams(t *testing.T) {
 	}
 
 	var errMsg rpc.ErrorResponse
-	json.Unmarshal(raw, &errMsg)
+	if err := json.Unmarshal(raw, &errMsg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errMsg.Code != "INVALID_PARAMS" {
 		t.Errorf("error code = %q, want %q", errMsg.Code, "INVALID_PARAMS")
 	}
@@ -265,7 +281,9 @@ func TestExecBadSecret(t *testing.T) {
 	}
 
 	var errMsg rpc.ErrorResponse
-	json.Unmarshal(raw, &errMsg)
+	if err := json.Unmarshal(raw, &errMsg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errMsg.Code != "AUTH_ERROR" {
 		t.Errorf("error code = %q, want %q", errMsg.Code, "AUTH_ERROR")
 	}
@@ -293,7 +311,9 @@ func TestActionsRequest(t *testing.T) {
 	}
 
 	var resp rpc.ActionsResponse
-	json.Unmarshal(raw, &resp)
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal actions response: %v", err)
+	}
 
 	if len(resp.Actions) != 3 {
 		t.Fatalf("actions count = %d, want 3", len(resp.Actions))
@@ -350,10 +370,23 @@ func TestLastAction(t *testing.T) {
 		}
 	}
 
-	// Give a moment for the server goroutine to record
-	time.Sleep(10 * time.Millisecond)
-
-	last := srv.GetLastAction()
+	// lastAction is set before the exit message is sent (server.go:230),
+	// so it should be available immediately after the client reads exit.
+	// Poll briefly to avoid any goroutine scheduling flakiness.
+	var last *LastAction
+	deadline := time.After(2 * time.Second)
+	for {
+		last = srv.GetLastAction()
+		if last != nil {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for last action to be recorded")
+		default:
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
 	if last == nil {
 		t.Fatal("expected last action to be recorded")
 	}
@@ -433,7 +466,9 @@ func TestUnknownMessageType(t *testing.T) {
 	}
 
 	var errMsg rpc.ErrorResponse
-	json.Unmarshal(raw, &errMsg)
+	if err := json.Unmarshal(raw, &errMsg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errMsg.Code != "UNKNOWN_TYPE" {
 		t.Errorf("error code = %q, want %q", errMsg.Code, "UNKNOWN_TYPE")
 	}
@@ -461,7 +496,9 @@ func TestActionsBadSecret(t *testing.T) {
 	}
 
 	var errMsg rpc.ErrorResponse
-	json.Unmarshal(raw, &errMsg)
+	if err := json.Unmarshal(raw, &errMsg); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errMsg.Code != "AUTH_ERROR" {
 		t.Errorf("error code = %q, want %q", errMsg.Code, "AUTH_ERROR")
 	}
@@ -493,7 +530,9 @@ func TestEmptyActionsConfig(t *testing.T) {
 	}
 
 	var resp rpc.ActionsResponse
-	json.Unmarshal(raw, &resp)
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal actions response: %v", err)
+	}
 
 	if len(resp.Actions) != 0 {
 		t.Errorf("actions count = %d, want 0", len(resp.Actions))
@@ -644,7 +683,9 @@ func TestMultipleRequestsOnSameConnection(t *testing.T) {
 	}
 
 	var resp rpc.ActionsResponse
-	json.Unmarshal(raw, &resp)
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal actions response: %v", err)
+	}
 	if len(resp.Actions) != 3 {
 		t.Errorf("actions count = %d, want 3", len(resp.Actions))
 	}
@@ -681,7 +722,9 @@ func TestStatusSocketMultipleConnections(t *testing.T) {
 		}
 
 		var got StatusInfo
-		json.Unmarshal(data, &got)
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("unmarshal status %d: %v", i, err)
+		}
 		if got.Project != "test" {
 			t.Errorf("connection %d: project = %q, want %q", i, got.Project, "test")
 		}
@@ -751,12 +794,97 @@ func TestExecWithSyncWait(t *testing.T) {
 		}
 		if msgType == rpc.TypeExit {
 			var msg rpc.ExitMessage
-			json.Unmarshal(raw, &msg)
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				t.Fatalf("unmarshal exit: %v", err)
+			}
 			if msg.Code != 0 {
 				t.Errorf("exit code = %d, want 0", msg.Code)
 			}
 			return
 		}
+	}
+}
+
+func TestStatusInfoIncludesActionRunning(t *testing.T) {
+	// Verify ActionRunning is included in the JSON output from the status socket.
+	sockPath := "/tmp/fb-action-running-test.sock"
+	defer os.Remove(sockPath)
+
+	info := StatusInfo{
+		Project:       "testproj",
+		Server:        "host-1",
+		ActionRunning: true,
+		LastAction: &LastAction{
+			Name:     "deploy",
+			ExitCode: 0,
+			Duration: 1500,
+		},
+	}
+
+	statusSrv, err := NewStatusServer(sockPath, func() StatusInfo { return info })
+	if err != nil {
+		t.Fatalf("NewStatusServer: %v", err)
+	}
+	defer statusSrv.Close()
+	go statusSrv.Serve()
+
+	conn, err := net.Dial("unix", sockPath)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	data, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+
+	var got StatusInfo
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if !got.ActionRunning {
+		t.Error("ActionRunning should be true")
+	}
+	if got.LastAction == nil {
+		t.Fatal("LastAction should not be nil")
+	}
+	if got.LastAction.Name != "deploy" {
+		t.Errorf("LastAction.Name = %q, want %q", got.LastAction.Name, "deploy")
+	}
+}
+
+func TestStatusInfoActionRunningFalse(t *testing.T) {
+	// Verify ActionRunning=false is serialized (not omitted) since it uses
+	// `json:"action_running"` without omitempty.
+	info := StatusInfo{
+		Project:       "testproj",
+		ActionRunning: false,
+	}
+
+	data, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	// The field should appear in JSON even when false
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, ok := raw["action_running"]; !ok {
+		t.Error("action_running field missing from JSON output")
+	}
+}
+
+func TestIsActionRunning(t *testing.T) {
+	secret := "test-secret-123"
+	_, srv := startTestServer(t, secret)
+
+	// Initially not running
+	if srv.IsActionRunning() {
+		t.Error("expected IsActionRunning() = false initially")
 	}
 }
 

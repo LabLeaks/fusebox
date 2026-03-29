@@ -35,14 +35,24 @@ type ContainerStatus struct {
 // PortMap tracks project-to-port assignments on the remote server.
 type PortMap map[string]int
 
+// remoteRunner abstracts command execution on a remote host (for testing).
+type remoteRunner interface {
+	RunCommand(cmd string) (stdout string, stderr string, exitCode int, err error)
+}
+
 // Manager manages Sysbox container lifecycle on a remote server via SSH.
 type Manager struct {
-	ssh *ssh.Client
+	ssh remoteRunner
 }
 
 // NewManager creates a Manager that runs docker commands over the given SSH client.
 func NewManager(client *ssh.Client) *Manager {
 	return &Manager{ssh: client}
+}
+
+// newManagerWithRunner creates a Manager with a custom remoteRunner (for testing).
+func newManagerWithRunner(r remoteRunner) *Manager {
+	return &Manager{ssh: r}
 }
 
 // ContainerName returns the docker container name for a project.
@@ -57,12 +67,12 @@ func (m *Manager) Create(projectName, token string, moshPort int) error {
 	}
 
 	name := ContainerName(projectName)
-	cmd := fmt.Sprintf(
-		"docker run --runtime=sysbox-runc -d --name %s -e CLAUDE_CODE_OAUTH_TOKEN=%s -p %d:60001/udp %s",
-		name, token, moshPort, imageName,
+	runCmd := fmt.Sprintf(
+		"docker run --runtime=sysbox-runc -d --name %s -p %d:60001/udp %s",
+		name, moshPort, imageName,
 	)
 
-	_, stderr, exitCode, err := m.ssh.RunCommand(cmd)
+	_, stderr, exitCode, err := m.ssh.RunCommand(runCmd)
 	if err != nil {
 		return fmt.Errorf("running container: %w", err)
 	}
@@ -70,6 +80,33 @@ func (m *Manager) Create(projectName, token string, moshPort int) error {
 		return fmt.Errorf("docker run failed (exit %d): %s", exitCode, strings.TrimSpace(stderr))
 	}
 
+	// Inject OAuth token via file inside the container to avoid exposing
+	// it in the process listing (docker run -e is visible via /proc).
+	if err := m.InjectToken(name, token); err != nil {
+		// Best-effort cleanup: remove the container we just started.
+		m.ssh.RunCommand(fmt.Sprintf("docker rm -f %s", name))
+		return fmt.Errorf("injecting token: %w", err)
+	}
+
+	return nil
+}
+
+// InjectToken writes the OAuth token to a file inside the container so that
+// Claude Code can read it without the token appearing in process arguments.
+func (m *Manager) InjectToken(containerName, token string) error {
+	injectCmd := fmt.Sprintf(
+		"docker exec %s bash -c %s",
+		containerName,
+		shellQuote("mkdir -p /root/.fusebox && echo -n "+shellQuote(token)+" > /root/.fusebox/token && chmod 600 /root/.fusebox/token"),
+	)
+
+	_, stderr, exitCode, err := m.ssh.RunCommand(injectCmd)
+	if err != nil {
+		return fmt.Errorf("exec into container: %w", err)
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("token injection failed (exit %d): %s", exitCode, strings.TrimSpace(stderr))
+	}
 	return nil
 }
 

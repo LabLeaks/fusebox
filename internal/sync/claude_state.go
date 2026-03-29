@@ -32,11 +32,20 @@ func CreateClaudeStateSync(manager *MutagenManager, projectName, localProjectPat
 	}
 
 	localSyncPath := filepath.Join(homeDir, ".claude", "projects", localEncoded)
-	remoteSyncPath := fmt.Sprintf("/home/%s/.claude/projects/%s", remoteUser, remoteEncoded)
+	remoteSyncPath := fmt.Sprintf("%s/.claude/projects/%s", remoteHomeDir(remoteUser), remoteEncoded)
 
 	sessionName := ClaudeSessionName(projectName)
 
 	return manager.Create(sessionName, localSyncPath, remoteUser, remoteHost, remoteSyncPath, nil)
+}
+
+// remoteHomeDir returns the home directory for a remote user.
+// Root's home is /root; all other users use /home/<user>.
+func remoteHomeDir(user string) string {
+	if user == "root" {
+		return "/root"
+	}
+	return fmt.Sprintf("/home/%s", user)
 }
 
 // settingsKeep lists the keys preserved in settings.json during transformation.
@@ -79,7 +88,7 @@ func CopyGlobalState(sshClient SSHClient, remoteUser string) error {
 	}
 
 	localClaudeDir := filepath.Join(homeDir, ".claude")
-	remoteClaudeDir := fmt.Sprintf("/home/%s/.claude", remoteUser)
+	remoteClaudeDir := fmt.Sprintf("%s/.claude", remoteHomeDir(remoteUser))
 
 	// Ensure remote .claude directory exists
 	mkdirCmd := fmt.Sprintf("mkdir -p %s/agents %s/skills", remoteClaudeDir, remoteClaudeDir)
@@ -138,7 +147,7 @@ func CopyGlobalState(sshClient SSHClient, remoteUser string) error {
 	return nil
 }
 
-// copyDir copies all files from a local directory to a remote directory.
+// copyDir recursively copies all files from a local directory to a remote directory.
 // Skips silently if the local directory doesn't exist.
 func copyDir(sshClient SSHClient, localDir, remoteDir string) error {
 	entries, err := os.ReadDir(localDir)
@@ -150,12 +159,25 @@ func copyDir(sshClient SSHClient, localDir, remoteDir string) error {
 	}
 
 	for _, entry := range entries {
+		localPath := filepath.Join(localDir, entry.Name())
+		remotePath := remoteDir + "/" + entry.Name()
+
 		if entry.IsDir() {
+			mkdirCmd := fmt.Sprintf("mkdir -p %s", remotePath)
+			_, stderr, exitCode, err := sshClient.RunCommand(mkdirCmd)
+			if err != nil {
+				return fmt.Errorf("creating remote directory %s: %w", entry.Name(), err)
+			}
+			if exitCode != 0 {
+				return fmt.Errorf("creating remote directory %s: %s", entry.Name(), strings.TrimSpace(stderr))
+			}
+			if err := copyDir(sshClient, localPath, remotePath); err != nil {
+				return err
+			}
 			continue
 		}
-		localFile := filepath.Join(localDir, entry.Name())
-		remoteFile := remoteDir + "/" + entry.Name()
-		if err := sshClient.CopyFile(localFile, remoteFile); err != nil {
+
+		if err := sshClient.CopyFile(localPath, remotePath); err != nil {
 			return fmt.Errorf("copying %s: %w", entry.Name(), err)
 		}
 	}

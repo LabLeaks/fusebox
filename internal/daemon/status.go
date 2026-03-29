@@ -10,11 +10,12 @@ import (
 
 // StatusInfo is the JSON response served on the status socket.
 type StatusInfo struct {
-	Project    string      `json:"project"`
-	Server     string      `json:"server,omitempty"`
-	Container  string      `json:"container,omitempty"`
-	SyncState  string      `json:"sync_state,omitempty"`
-	LastAction *LastAction `json:"last_action,omitempty"`
+	Project       string      `json:"project"`
+	Server        string      `json:"server,omitempty"`
+	Container     string      `json:"container,omitempty"`
+	SyncState     string      `json:"sync_state,omitempty"`
+	ActionRunning bool        `json:"action_running"`
+	LastAction    *LastAction `json:"last_action,omitempty"`
 }
 
 // StatusServer serves project status over a Unix socket.

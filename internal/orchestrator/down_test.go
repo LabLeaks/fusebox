@@ -1,9 +1,11 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -239,6 +241,38 @@ func TestStopDaemon_StalePid(t *testing.T) {
 	}
 }
 
+func TestPIDFileLifecycle(t *testing.T) {
+	// Full round trip: write PID file, verify contents, read back, clean up.
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "myapp.pid")
+	pid := os.Getpid()
+
+	// Write (as up.go does)
+	err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", pid)), 0600)
+	if err != nil {
+		t.Fatalf("write PID file: %v", err)
+	}
+
+	// Read back (as down.go does)
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("read PID file: %v", err)
+	}
+	readPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatalf("parse PID: %v", err)
+	}
+	if readPID != pid {
+		t.Errorf("PID = %d, want %d", readPID, pid)
+	}
+
+	// Cleanup (as up.go defer does)
+	os.Remove(pidPath)
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Error("PID file should not exist after removal")
+	}
+}
+
 func TestDown_SessionNames(t *testing.T) {
 	mgr, runner := newTestMutagen(mockResult{}, mockResult{})
 	cm := &mockContainerManager{}
@@ -272,6 +306,38 @@ func TestIsProcessGone(t *testing.T) {
 	}
 	if isProcessGone(fmt.Errorf("permission denied")) {
 		t.Error("should not match 'permission denied'")
+	}
+}
+
+func TestCheckActionRunning_ParsesStatusInfo(t *testing.T) {
+	// Verify that daemonStatus struct can decode ActionRunning from StatusInfo JSON.
+	// This is the core of Bug #27: the status socket now returns action_running.
+	jsonData := `{"project":"test","action_running":true,"last_action":{"name":"build","exit_code":0,"duration_ms":100,"timestamp":"2026-01-01T00:00:00Z"}}`
+
+	var status daemonStatus
+	if err := json.Unmarshal([]byte(jsonData), &status); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if !status.ActionRunning {
+		t.Error("expected ActionRunning to be true")
+	}
+	if status.LastAction == nil || status.LastAction.Name != "build" {
+		t.Errorf("LastAction.Name = %v, want 'build'", status.LastAction)
+	}
+}
+
+func TestCheckActionRunning_FalseWhenNotRunning(t *testing.T) {
+	jsonData := `{"project":"test","action_running":false}`
+
+	var status daemonStatus
+	if err := json.Unmarshal([]byte(jsonData), &status); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if status.ActionRunning {
+		t.Error("expected ActionRunning to be false")
+	}
+	if status.LastAction != nil {
+		t.Error("expected LastAction to be nil when omitted")
 	}
 }
 

@@ -140,7 +140,7 @@ actions:
         pattern: "^.{1,120}$"
       body:
         type: regex
-        pattern: "^[\\s\\S]{0,4000}$"
+        pattern: "^[\\s\\S]+$"
       base:
         type: regex
         pattern: "^[a-zA-Z0-9_.\\-/]+$"

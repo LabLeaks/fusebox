@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"bufio"
-	"context"
 	"os/exec"
 	"syscall"
 	"time"
@@ -26,14 +25,11 @@ type ExecResult struct {
 }
 
 // Execute runs a shell command, streaming stdout/stderr as RPC messages.
-// On timeout, sends SIGTERM then SIGKILL after 5s.
+// On timeout, sends SIGTERM to the process group, then SIGKILL after 5s grace.
 func Execute(cfg ExecConfig) ExecResult {
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "sh", "-c", cfg.Command)
+	cmd := exec.Command("sh", "-c", cfg.Command)
 	cmd.Dir = cfg.WorkDir
 	// Use process group so we can kill child processes
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -51,6 +47,22 @@ func Execute(cfg ExecConfig) ExecResult {
 	if err := cmd.Start(); err != nil {
 		return ExecResult{ExitCode: -1, Duration: time.Since(start)}
 	}
+
+	// Set up timeout: SIGTERM then SIGKILL after 5s grace period
+	timedOut := make(chan struct{})
+	var killTimer *time.Timer
+	timer := time.AfterFunc(cfg.Timeout, func() {
+		close(timedOut)
+		if cmd.Process != nil {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			// Give 5s for graceful shutdown, then SIGKILL
+			killTimer = time.AfterFunc(5*time.Second, func() {
+				if cmd.Process != nil {
+					syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				}
+			})
+		}
+	})
 
 	// Stream stdout and stderr concurrently
 	done := make(chan struct{}, 2)
@@ -84,21 +96,17 @@ func Execute(cfg ExecConfig) ExecResult {
 	<-done
 
 	err = cmd.Wait()
+	timer.Stop()
+	if killTimer != nil {
+		killTimer.Stop()
+	}
 	duration := time.Since(start)
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			// Timeout: send SIGTERM to process group
-			if cmd.Process != nil {
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-				// Give 5s for graceful shutdown, then SIGKILL
-				time.AfterFunc(5*time.Second, func() {
-					if cmd.Process != nil {
-						syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-					}
-				})
-			}
+		select {
+		case <-timedOut:
 			return ExecResult{ExitCode: -1, Duration: duration}
+		default:
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return ExecResult{ExitCode: exitErr.ExitCode(), Duration: duration}

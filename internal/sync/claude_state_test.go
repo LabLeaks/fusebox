@@ -244,6 +244,73 @@ func (m *mockSSHClient) RunCommand(cmd string) (string, string, int, error) {
 	return m.runResult.stdout, m.runResult.stderr, m.runResult.exitCode, m.runResult.err
 }
 
+func TestRemoteHomeDir(t *testing.T) {
+	tests := []struct {
+		user string
+		want string
+	}{
+		{"root", "/root"},
+		{"deploy", "/home/deploy"},
+		{"ubuntu", "/home/ubuntu"},
+		{"admin", "/home/admin"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.user, func(t *testing.T) {
+			got := remoteHomeDir(tt.user)
+			if got != tt.want {
+				t.Errorf("remoteHomeDir(%q) = %q, want %q", tt.user, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateClaudeStateSync_RootUser(t *testing.T) {
+	runner := &mockRunner{results: []mockResult{{}}}
+	mgr := NewMutagenManagerWithRunner(runner)
+
+	localEncoded := EncodePath("/Users/gk/work/project")
+	remoteEncoded := EncodePath("/root/project")
+
+	localSyncPath := "/Users/gk/.claude/projects/" + localEncoded
+	remoteSyncPath := "/root/.claude/projects/" + remoteEncoded
+	sessionName := ClaudeSessionName("project")
+
+	err := mgr.Create(sessionName, localSyncPath, "root", "10.0.0.1", remoteSyncPath, nil)
+	if err != nil {
+		t.Fatalf("Create error: %v", err)
+	}
+
+	call := runner.calls[0]
+	got := strings.Join(call.Args, " ")
+	if !strings.Contains(got, "/root/.claude/projects/") {
+		t.Errorf("expected /root/.claude path for root user, got: %s", got)
+	}
+	if strings.Contains(got, "/home/root/") {
+		t.Errorf("should not use /home/root/ for root user, got: %s", got)
+	}
+}
+
+func TestCopyGlobalState_RootUser(t *testing.T) {
+	sshClient := &mockSSHClient{}
+
+	err := CopyGlobalState(sshClient, "root")
+	if err != nil {
+		t.Fatalf("CopyGlobalState error: %v", err)
+	}
+
+	if len(sshClient.commands) < 1 {
+		t.Fatal("expected at least 1 RunCommand call for mkdir")
+	}
+
+	mkdirCmd := sshClient.commands[0]
+	if !strings.Contains(mkdirCmd, "/root/.claude") {
+		t.Errorf("mkdir for root should use /root/.claude, got: %q", mkdirCmd)
+	}
+	if strings.Contains(mkdirCmd, "/home/root/") {
+		t.Errorf("mkdir for root should not use /home/root/, got: %q", mkdirCmd)
+	}
+}
+
 func TestCopyGlobalState_CreatesDirectories(t *testing.T) {
 	sshClient := &mockSSHClient{}
 
@@ -311,7 +378,6 @@ func TestCopyDir_WithFiles(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(dir+"/file1.md", []byte("content1"), 0644)
 	os.WriteFile(dir+"/file2.json", []byte("content2"), 0644)
-	os.Mkdir(dir+"/subdir", 0755) // should be skipped
 
 	sshClient := &mockSSHClient{}
 
@@ -322,6 +388,66 @@ func TestCopyDir_WithFiles(t *testing.T) {
 
 	if len(sshClient.copiedFiles) != 2 {
 		t.Fatalf("copied files = %d, want 2", len(sshClient.copiedFiles))
+	}
+}
+
+func TestCopyDir_RecursesIntoSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(dir+"/top.md", []byte("top"), 0644)
+	os.MkdirAll(dir+"/sub/nested", 0755)
+	os.WriteFile(dir+"/sub/mid.md", []byte("mid"), 0644)
+	os.WriteFile(dir+"/sub/nested/deep.md", []byte("deep"), 0644)
+
+	sshClient := &mockSSHClient{}
+
+	err := copyDir(sshClient, dir, "/remote/target")
+	if err != nil {
+		t.Fatalf("copyDir error: %v", err)
+	}
+
+	// Should have created 2 remote directories (sub, sub/nested)
+	mkdirCount := 0
+	for _, cmd := range sshClient.commands {
+		if strings.Contains(cmd, "mkdir -p") {
+			mkdirCount++
+		}
+	}
+	if mkdirCount != 2 {
+		t.Errorf("mkdir calls = %d, want 2; commands: %v", mkdirCount, sshClient.commands)
+	}
+
+	// Should have copied 3 files (top.md, sub/mid.md, sub/nested/deep.md)
+	if len(sshClient.copiedFiles) != 3 {
+		t.Fatalf("copied files = %d, want 3", len(sshClient.copiedFiles))
+	}
+
+	// Verify remote paths
+	remotes := make(map[string]bool)
+	for _, c := range sshClient.copiedFiles {
+		remotes[c.Remote] = true
+	}
+	for _, want := range []string{"/remote/target/top.md", "/remote/target/sub/mid.md", "/remote/target/sub/nested/deep.md"} {
+		if !remotes[want] {
+			t.Errorf("missing remote path %q in %v", want, sshClient.copiedFiles)
+		}
+	}
+}
+
+func TestCopyDir_SubdirMkdirFailure(t *testing.T) {
+	dir := t.TempDir()
+	os.Mkdir(dir+"/sub", 0755)
+	os.WriteFile(dir+"/sub/file.md", []byte("content"), 0644)
+
+	sshClient := &mockSSHClient{}
+	sshClient.runResult.exitCode = 1
+	sshClient.runResult.stderr = "permission denied"
+
+	err := copyDir(sshClient, dir, "/remote/target")
+	if err == nil {
+		t.Fatal("expected error on mkdir failure for subdirectory")
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("error = %q, want to contain 'permission denied'", err.Error())
 	}
 }
 

@@ -49,6 +49,7 @@ func ParseGlobalConfig(data []byte) (*GlobalConfig, error) {
 	if err := validateGlobalConfig(&cfg); err != nil {
 		return nil, err
 	}
+	applyGlobalDefaults(&cfg)
 
 	return &cfg, nil
 }

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 
 	"github.com/lableaks/fusebox/internal/config"
+	"github.com/lableaks/fusebox/internal/container"
 	"github.com/lableaks/fusebox/internal/orchestrator"
+	"github.com/lableaks/fusebox/internal/ssh"
 	"github.com/lableaks/fusebox/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -42,13 +44,19 @@ func runDown(cmd *cobra.Command, args []string) error {
 	}
 
 	// Container operations require SSH, but for down without --destroy
-	// we only need mutagen and the local daemon. Use a nil-safe stub
-	// that only errors if actually called.
+	// we only need mutagen and the local daemon.
 	var cm orchestrator.ContainerManager
 	if downDestroy {
-		// TODO: establish SSH connection and create container.NewManager
-		// For now, return clear error if --destroy is used without SSH
-		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --destroy requires SSH connection (not yet wired)")
+		sshOpts := []ssh.ConnectOption{}
+		if resolved.Server.Port != 0 {
+			sshOpts = append(sshOpts, ssh.WithPort(resolved.Server.Port))
+		}
+		sshClient, sshErr := ssh.Connect(resolved.Server.Host, resolved.Server.User, sshOpts...)
+		if sshErr != nil {
+			return fmt.Errorf("--destroy requires SSH: %w", sshErr)
+		}
+		defer sshClient.Close()
+		cm = container.NewManager(sshClient)
 	}
 
 	opts := orchestrator.DownOptions{

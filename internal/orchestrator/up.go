@@ -88,15 +88,7 @@ func Up(ucfg UpConfig) error {
 			return fmt.Errorf("allocating port: %w", err)
 		}
 	} else {
-		// 3. Ensure image
-		fmt.Fprintf(w, "%s: ensuring container image... ", serverHost)
-		if err := cm.EnsureImage(); err != nil {
-			fmt.Fprintf(w, "failed\n")
-			return fmt.Errorf("ensuring image: %w", err)
-		}
-		fmt.Fprintf(w, "ok\n")
-
-		// 4. Allocate port
+		// 3. Allocate port
 		moshPort, err = cm.AllocatePort(projectName)
 		if err != nil {
 			return fmt.Errorf("allocating port: %w", err)
@@ -119,20 +111,33 @@ func Up(ucfg UpConfig) error {
 			fmt.Fprintf(w, "ok\n")
 		}
 
-		// 6. Copy fusebox binary into container
+		// 5. Copy fusebox binary into container
 		if ucfg.FuseboxBinary != "" {
 			fmt.Fprintf(w, "%s: copying fusebox binary... ", serverHost)
+
+			// SCP binary to remote server temp path
+			const remoteTmpBin = "/tmp/fusebox-remote"
+			if err := sshClient.CopyFile(ucfg.FuseboxBinary, remoteTmpBin); err != nil {
+				fmt.Fprintf(w, "failed\n")
+				return fmt.Errorf("uploading binary to server: %w", err)
+			}
+
+			// docker cp from remote temp path into container
 			containerName := container.ContainerName(projectName)
-			cpCmd := fmt.Sprintf("docker cp %s %s:%s", ucfg.FuseboxBinary, containerName, remoteBinPath)
+			cpCmd := fmt.Sprintf("docker cp %s %s:%s", remoteTmpBin, containerName, remoteBinPath)
 			_, stderr, exitCode, err := sshClient.RunCommand(cpCmd)
 			if err != nil {
 				fmt.Fprintf(w, "failed\n")
-				return fmt.Errorf("copying binary: %w", err)
+				return fmt.Errorf("copying binary into container: %w", err)
 			}
 			if exitCode != 0 {
 				fmt.Fprintf(w, "failed\n")
 				return fmt.Errorf("docker cp failed (exit %d): %s", exitCode, stderr)
 			}
+
+			// Clean up temp file
+			_, _, _, _ = sshClient.RunCommand("rm " + remoteTmpBin)
+
 			fmt.Fprintf(w, "ok\n")
 		}
 	}
@@ -223,7 +228,7 @@ func Up(ucfg UpConfig) error {
 	// Write secret into container
 	containerName := container.ContainerName(projectName)
 	writeSecretCmd := fmt.Sprintf(
-		"docker exec %s bash -c 'mkdir -p /root/.fusebox && echo -n %s > /root/.fusebox/secret'",
+		"docker exec %s bash -c 'mkdir -p /root/.fusebox && echo -n '\"'\"'%s'\"'\"' > /root/.fusebox/secret && chmod 600 /root/.fusebox/secret'",
 		containerName, secret,
 	)
 	_, stderr, exitCode, err := sshClient.RunCommand(writeSecretCmd)
@@ -274,10 +279,11 @@ func Up(ucfg UpConfig) error {
 
 	statusSrv, err := daemon.NewStatusServer(sockPath, func() daemon.StatusInfo {
 		return daemon.StatusInfo{
-			Project:    projectName,
-			Server:     serverHost,
-			Container:  containerName,
-			LastAction: daemonSrv.GetLastAction(),
+			Project:       projectName,
+			Server:        serverHost,
+			Container:     containerName,
+			ActionRunning: daemonSrv.IsActionRunning(),
+			LastAction:    daemonSrv.GetLastAction(),
 		}
 	})
 	if err != nil {
@@ -285,6 +291,13 @@ func Up(ucfg UpConfig) error {
 	}
 	go statusSrv.Serve()
 	defer statusSrv.Close()
+
+	// Write PID file
+	pidPath := filepath.Join(secretDir, projectName+".pid")
+	if err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0600); err != nil {
+		return fmt.Errorf("writing PID file: %w", err)
+	}
+	defer os.Remove(pidPath)
 
 	// 14-15. Ready
 	fmt.Fprintf(w, "\nReady. Connect with: mosh --port=%d %s\n\n", moshPort, serverHost)

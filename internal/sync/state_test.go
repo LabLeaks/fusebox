@@ -125,7 +125,7 @@ func TestSyncWaiter_WaitForWatching_Timeout(t *testing.T) {
 	mgr := NewMutagenManagerWithRunner(runner)
 	waiter := NewSyncWaiter(mgr)
 
-	state, err := waiter.WaitForWatching("fusebox-src-test", 1*time.Millisecond)
+	state, err := waiter.WaitForWatching("fusebox-src-test", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}

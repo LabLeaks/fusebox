@@ -1,6 +1,8 @@
 package container
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -146,6 +148,167 @@ func TestShellQuote(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+// mockRunner records commands for testing Manager methods.
+type mockRunner struct {
+	commands []string
+	// responses maps command prefix to (stdout, stderr, exitCode, err)
+	responses map[string]mockResponse
+	// defaultResponse used when no prefix match
+	defaultResponse mockResponse
+}
+
+type mockResponse struct {
+	stdout   string
+	stderr   string
+	exitCode int
+	err      error
+}
+
+func newMockRunner() *mockRunner {
+	return &mockRunner{
+		responses: make(map[string]mockResponse),
+		defaultResponse: mockResponse{
+			stdout: "", stderr: "", exitCode: 0, err: nil,
+		},
+	}
+}
+
+func (m *mockRunner) RunCommand(cmd string) (string, string, int, error) {
+	m.commands = append(m.commands, cmd)
+	for prefix, resp := range m.responses {
+		if strings.HasPrefix(cmd, prefix) {
+			return resp.stdout, resp.stderr, resp.exitCode, resp.err
+		}
+	}
+	return m.defaultResponse.stdout, m.defaultResponse.stderr, m.defaultResponse.exitCode, m.defaultResponse.err
+}
+
+func TestCreate_NoTokenInDockerRun(t *testing.T) {
+	mock := newMockRunner()
+	// EnsureImage: image already exists
+	mock.responses["docker image inspect"] = mockResponse{exitCode: 0}
+	mgr := newManagerWithRunner(mock)
+
+	token := "super-secret-oauth-token"
+	err := mgr.Create("myproject", token, 60001)
+	if err != nil {
+		t.Fatalf("Create() returned error: %v", err)
+	}
+
+	// Verify docker run command does NOT contain the token as an env var
+	for _, cmd := range mock.commands {
+		if strings.HasPrefix(cmd, "docker run") {
+			if strings.Contains(cmd, "-e CLAUDE_CODE_OAUTH_TOKEN") {
+				t.Error("docker run still contains -e CLAUDE_CODE_OAUTH_TOKEN; token visible in process listing")
+			}
+			if strings.Contains(cmd, token) {
+				t.Error("docker run command contains the raw token")
+			}
+		}
+	}
+}
+
+func TestCreate_InjectsTokenViaDockerExec(t *testing.T) {
+	mock := newMockRunner()
+	mock.responses["docker image inspect"] = mockResponse{exitCode: 0}
+	mgr := newManagerWithRunner(mock)
+
+	token := "test-token-value"
+	err := mgr.Create("myproject", token, 60001)
+	if err != nil {
+		t.Fatalf("Create() returned error: %v", err)
+	}
+
+	// Verify a docker exec command was issued to inject the token
+	foundExec := false
+	for _, cmd := range mock.commands {
+		if strings.HasPrefix(cmd, "docker exec") {
+			foundExec = true
+			if !strings.Contains(cmd, "/root/.fusebox/token") {
+				t.Error("docker exec does not write to /root/.fusebox/token")
+			}
+			if !strings.Contains(cmd, "chmod 600") {
+				t.Error("docker exec does not chmod 600 the token file")
+			}
+		}
+	}
+	if !foundExec {
+		t.Error("no docker exec command issued to inject the token")
+	}
+}
+
+func TestCreate_CleansUpOnTokenInjectionFailure(t *testing.T) {
+	mock := newMockRunner()
+	mock.responses["docker image inspect"] = mockResponse{exitCode: 0}
+	mock.responses["docker exec"] = mockResponse{exitCode: 1, stderr: "exec failed"}
+	mgr := newManagerWithRunner(mock)
+
+	err := mgr.Create("myproject", "tok", 60001)
+	if err == nil {
+		t.Fatal("Create() should have returned an error when token injection fails")
+	}
+	if !strings.Contains(err.Error(), "injecting token") {
+		t.Errorf("error should mention injecting token, got: %v", err)
+	}
+
+	// Verify cleanup: docker rm -f was called
+	foundCleanup := false
+	for _, cmd := range mock.commands {
+		if strings.HasPrefix(cmd, "docker rm -f") {
+			foundCleanup = true
+		}
+	}
+	if !foundCleanup {
+		t.Error("container not cleaned up after token injection failure")
+	}
+}
+
+func TestInjectToken_Success(t *testing.T) {
+	mock := newMockRunner()
+	mgr := newManagerWithRunner(mock)
+
+	err := mgr.InjectToken("fusebox-myproject", "my-token")
+	if err != nil {
+		t.Fatalf("InjectToken() returned error: %v", err)
+	}
+
+	if len(mock.commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(mock.commands))
+	}
+	cmd := mock.commands[0]
+	if !strings.HasPrefix(cmd, "docker exec fusebox-myproject") {
+		t.Errorf("expected docker exec on the container, got: %s", cmd)
+	}
+}
+
+func TestInjectToken_Failure(t *testing.T) {
+	mock := newMockRunner()
+	mock.responses["docker exec"] = mockResponse{exitCode: 1, stderr: "container not running"}
+	mgr := newManagerWithRunner(mock)
+
+	err := mgr.InjectToken("fusebox-myproject", "my-token")
+	if err == nil {
+		t.Fatal("InjectToken() should return error on failure")
+	}
+	if !strings.Contains(err.Error(), "token injection failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestInjectToken_SSHError(t *testing.T) {
+	mock := newMockRunner()
+	mock.defaultResponse = mockResponse{err: fmt.Errorf("ssh connection closed")}
+	mgr := newManagerWithRunner(mock)
+
+	err := mgr.InjectToken("fusebox-myproject", "my-token")
+	if err == nil {
+		t.Fatal("InjectToken() should return error on SSH failure")
+	}
+	if !strings.Contains(err.Error(), "exec into container") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

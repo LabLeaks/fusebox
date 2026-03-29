@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
 
 func validateProjectConfig(cfg *ProjectConfig) error {
 	if cfg.Version == 0 {
@@ -32,6 +35,9 @@ func validateParam(actionName, paramName string, p Param) error {
 		if p.Pattern == "" {
 			return fmt.Errorf("%s: regex type requires pattern", prefix)
 		}
+		if _, err := regexp.Compile(p.Pattern); err != nil {
+			return fmt.Errorf("%s: invalid regex pattern: %w", prefix, err)
+		}
 	case "enum":
 		if len(p.Values) == 0 {
 			return fmt.Errorf("%s: enum type requires values", prefix)
@@ -59,11 +65,13 @@ func validateGlobalConfig(cfg *GlobalConfig) error {
 	if cfg.Server.User == "" {
 		return fmt.Errorf("global config: server.user is required")
 	}
+	return nil
+}
+
+func applyGlobalDefaults(cfg *GlobalConfig) {
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 22
 	}
-
-	// Apply defaults
 	if cfg.Defaults.Image == "" {
 		cfg.Defaults.Image = "fusebox/claude:latest"
 	}
@@ -76,6 +84,4 @@ func validateGlobalConfig(cfg *GlobalConfig) error {
 	if cfg.Defaults.RPCPort == 0 {
 		cfg.Defaults.RPCPort = 7600
 	}
-
-	return nil
 }

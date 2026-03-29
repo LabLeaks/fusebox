@@ -10,14 +10,16 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // Client wraps an SSH connection to a remote server.
 type Client struct {
-	client *ssh.Client
-	host   string
-	user   string
-	port   int
+	client    *ssh.Client
+	agentConn net.Conn
+	host      string
+	user      string
+	port      int
 }
 
 // ConnectOption configures a Client connection.
@@ -69,7 +71,7 @@ func Connect(host, user string, opts ...ConnectOption) (*Client, error) {
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeysCallback(agentClient.Signers),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback(),
 		Timeout:         cfg.timeout,
 	}
 
@@ -81,16 +83,38 @@ func Connect(host, user string, opts ...ConnectOption) (*Client, error) {
 	}
 
 	return &Client{
-		client: sshClient,
-		host:   host,
-		user:   user,
-		port:   cfg.port,
+		client:    sshClient,
+		agentConn: agentConn,
+		host:      host,
+		user:      user,
+		port:      cfg.port,
 	}, nil
 }
 
-// Close closes the SSH connection.
+// hostKeyCallback returns a host key callback using ~/.ssh/known_hosts.
+// Falls back to insecure (accept all) if known_hosts doesn't exist.
+func hostKeyCallback() ssh.HostKeyCallback {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ssh.InsecureIgnoreHostKey()
+	}
+	knownHostsPath := home + "/.ssh/known_hosts"
+	cb, err := knownhosts.New(knownHostsPath)
+	if err != nil {
+		return ssh.InsecureIgnoreHostKey()
+	}
+	return cb
+}
+
+// Close closes the SSH connection and the underlying agent socket.
 func (c *Client) Close() error {
-	return c.client.Close()
+	sshErr := c.client.Close()
+	if c.agentConn != nil {
+		if err := c.agentConn.Close(); err != nil && sshErr == nil {
+			sshErr = err
+		}
+	}
+	return sshErr
 }
 
 // RunCommand runs a command and returns stdout, stderr, and exit code.
@@ -166,7 +190,8 @@ func (c *Client) CopyFile(localPath, remotePath string) error {
 	go func() {
 		defer pipe.Close()
 		// SCP protocol: send file header then content then null byte
-		_, err := fmt.Fprintf(pipe, "C0644 %d %s\n", stat.Size(), stat.Name())
+		mode := stat.Mode().Perm()
+		_, err := fmt.Fprintf(pipe, "C%04o %d %s\n", mode, stat.Size(), stat.Name())
 		if err != nil {
 			errCh <- fmt.Errorf("writing scp header: %w", err)
 			return

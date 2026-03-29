@@ -26,10 +26,15 @@ type DownOptions struct {
 	Force       bool
 }
 
+// daemonStatusAction mirrors daemon.LastAction for JSON decoding from the status socket.
+type daemonStatusAction struct {
+	Name string `json:"name"`
+}
+
 // daemonStatus represents the JSON structure from the status socket.
 type daemonStatus struct {
-	LastAction    string `json:"last_action"`
-	ActionRunning bool   `json:"action_running"`
+	ActionRunning bool                `json:"action_running"`
+	LastAction    *daemonStatusAction `json:"last_action,omitempty"`
 }
 
 // Down stops a fusebox session gracefully.
@@ -142,7 +147,11 @@ func checkActionRunning(runDir, projectName string) (bool, string) {
 		return false, ""
 	}
 
-	return status.ActionRunning, status.LastAction
+	actionName := ""
+	if status.LastAction != nil {
+		actionName = status.LastAction.Name
+	}
+	return status.ActionRunning, actionName
 }
 
 // pauseSession pauses a Mutagen session, skipping gracefully if already paused or not found.

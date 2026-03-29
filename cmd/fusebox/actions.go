@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"sort"
 	"strings"
@@ -37,44 +35,19 @@ func runActions(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading shared secret: %w", err)
 	}
 
-	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", actionsPort))
+	client, err := rpc.Dial(rpc.ClientConfig{
+		Address: fmt.Sprintf("localhost:%d", actionsPort),
+		Secret:  strings.TrimSpace(string(secret)),
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error: local machine unreachable")
 		return nil
 	}
-	defer conn.Close()
+	defer client.Close()
 
-	encoder := rpc.NewEncoder(conn)
-	decoder := rpc.NewDecoder(conn)
-
-	req := rpc.ActionsRequest{
-		Type:   rpc.TypeActions,
-		Secret: strings.TrimSpace(string(secret)),
-	}
-	if err := encoder.Send(req); err != nil {
-		return fmt.Errorf("sending actions request: %w", err)
-	}
-
-	msgType, raw, err := decoder.ReceiveEnvelope()
+	resp, err := client.RequestActions()
 	if err != nil {
-		return fmt.Errorf("reading response: %w", err)
-	}
-
-	if msgType == rpc.TypeError {
-		var errResp rpc.ErrorResponse
-		if err := json.Unmarshal(raw, &errResp); err != nil {
-			return fmt.Errorf("parsing error response: %w", err)
-		}
-		return fmt.Errorf("daemon error: %s", errResp.Message)
-	}
-
-	if msgType != rpc.TypeActionsResponse {
-		return fmt.Errorf("unexpected response type: %s", msgType)
-	}
-
-	var resp rpc.ActionsResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return fmt.Errorf("parsing actions response: %w", err)
+		return fmt.Errorf("requesting actions: %w", err)
 	}
 
 	if len(resp.Actions) == 0 {

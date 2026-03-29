@@ -329,7 +329,10 @@ func TestWaitForSync_Timeout(t *testing.T) {
 	}
 	mgr := NewMutagenManagerWithRunner(runner)
 
-	err := mgr.WaitForSync("fusebox-src-test", 1*time.Millisecond)
+	// Use a short but non-trivial timeout. The mock returns instantly so
+	// the first poll fires, sees "Scanning", and the deadline check triggers.
+	// Avoid 1ms which is fragile on loaded CI machines.
+	err := mgr.WaitForSync("fusebox-src-test", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}

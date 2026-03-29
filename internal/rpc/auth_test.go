@@ -70,6 +70,10 @@ func TestValidateSecretEmpty(t *testing.T) {
 }
 
 func TestValidateSecretBothEmpty(t *testing.T) {
+	// subtle.ConstantTimeCompare([]byte(""), []byte("")) == 1, so two empty
+	// strings are considered equal. This is safe in practice because the daemon
+	// server always generates a 64-char hex secret via GenerateSecret — empty
+	// secrets never appear in production. Documenting this behavior explicitly.
 	if !ValidateSecret("", "") {
 		t.Error("ValidateSecret returned false for two empty strings")
 	}
